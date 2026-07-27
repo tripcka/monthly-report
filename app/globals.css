@@ -1,0 +1,16 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  font-family: "Noto Sans KR", sans-serif;
+  background: #ffffff;
+}
+
+/* print-friendly page breaks for the report view */
+.report-page {
+  break-after: page;
+  page-break-after: always;
+}
