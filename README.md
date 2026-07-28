@@ -37,6 +37,49 @@ git push -u origin main
 1. vercel.com 로그인 → "Add New Project" → "Deploy without Git" (또는 CLI: `npx vercel`)
 2. 이 프로젝트 폴더를 그대로 업로드/드래그
 
+## 임시저장 (자동 저장)
+
+입력하신 내용(호텔명, 채널별 데이터 등)은 브라우저의 localStorage에 자동으로 저장됩니다.
+페이지를 새로고침하거나 나갔다 다시 들어와도 그대로 남아있습니다. 새로 시작하고 싶으면
+왼쪽 패널의 "임시저장 지우고 새로 시작하기"를 누르면 됩니다.
+
+- 이 저장은 **그 브라우저/그 컴퓨터에만** 남습니다 (다른 사람과 공유되지 않음, 서버에 안 올라감).
+- 이미지를 여러 개 첨부하면 브라우저 저장 용량 한도(보통 5~10MB)를 넘어 저장이 실패할 수 있어요 —
+  이 경우 콘솔에 경고만 남고 앱은 정상 작동하니, 다운로드/Drive 저장부터 먼저 하시는 걸 권장합니다.
+
+## Google Drive에 직접 저장하기 (선택 기능)
+
+PPTX를 다운로드하는 대신, 버튼 하나로 Google Drive에 바로 저장할 수 있습니다. 이건 사장님의
+Google 계정으로 직접 인증하는 방식이라, 아래 설정을 **한 번만** 해두시면 됩니다.
+
+### 설정 방법 (Google Cloud Console, 최초 1회)
+
+1. [console.cloud.google.com](https://console.cloud.google.com) 접속 → 새 프로젝트 생성 (이름 아무거나, 예: "tripicka-report")
+2. 좌측 메뉴 **"API 및 서비스" → "라이브러리"** → "Google Drive API" 검색 → **사용 설정**
+3. **"API 및 서비스" → "OAuth 동의 화면"**
+   - User Type: **외부(External)** 선택 → 만들기
+   - 앱 이름/이메일 등 필수 항목만 채우고 저장 (게시 상태는 "테스트"로 두어도 본인 계정은 계속 사용 가능)
+4. **"API 및 서비스" → "사용자 인증 정보" → "+ 사용자 인증 정보 만들기" → "OAuth 클라이언트 ID"**
+   - 애플리케이션 유형: **웹 애플리케이션**
+   - "승인된 자바스크립트 원본"에 Vercel 배포 주소 추가 (예: `https://monthly-report-xxxx.vercel.app`)
+     - 로컬에서 테스트하려면 `http://localhost:3000`도 추가
+   - 만들기 → **클라이언트 ID** 복사 (`xxxxx.apps.googleusercontent.com` 형태)
+5. Vercel 대시보드 → 프로젝트 → **Settings → Environment Variables**
+   - Key: `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+   - Value: 방금 복사한 클라이언트 ID
+   - 저장 후 **재배포**(Deployments 탭에서 최신 배포 옆 "..." → Redeploy)
+
+### 사용 방법
+1. 앱에서 (선택) 저장하고 싶은 Drive 폴더를 웹브라우저로 열어서 주소창 URL을 그대로 복사해
+   "저장할 폴더 URL 또는 ID" 칸에 붙여넣기 — 비워두면 내 드라이브 최상위에 저장됩니다
+2. **"Google Drive에 저장"** 클릭 → 처음엔 Google 로그인 팝업이 뜸 → 로그인/권한 허용
+3. 저장 완료되면 "Drive에서 열기" 링크가 나타남
+
+이 앱은 `drive.file` 권한만 요청합니다 — 즉 **이 앱이 만든 파일에만 접근**하고, 기존 드라이브
+파일은 보거나 건드릴 수 없습니다 (더 안전한 최소 권한).
+
+
+
 ## 채널 추가/수정하기
 
 `lib/channels.js` 파일 하나만 수정하면 전체 앱에 반영됩니다. 배열에 항목을 추가/수정하면
