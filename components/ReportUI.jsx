@@ -89,6 +89,35 @@ export function CsvTable({ label, rows }) {
   );
 }
 
+export function SplitCsvTable({ label, rows, splitAt }) {
+  if (!rows || rows.length <= 1) return null;
+  const header = rows[0];
+  const dataRows = rows.slice(1);
+  const at = splitAt || Math.ceil(dataRows.length / 2);
+  const left = [header, ...dataRows.slice(0, at)];
+  const right = dataRows.length > at ? [header, ...dataRows.slice(at)] : null;
+  return (
+    <div className="mb-6">
+      {label ? <div className="text-navy font-bold text-sm mb-2">{label}</div> : null}
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <CsvTable rows={left} />
+        </div>
+        {right ? (
+          <div className="flex-1">
+            <CsvTable rows={right} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** table.layout === 'split'이면 좌/우 분할, 아니면 일반 표 */
+export function AutoTable({ label, table, rows }) {
+  if (table.layout === "split") return <SplitCsvTable label={label} rows={rows} splitAt={table.splitAt} />;
+  return <CsvTable label={label} rows={rows} />;
+}
 export function ImageSlot({ label, src }) {
   if (src) {
     return (

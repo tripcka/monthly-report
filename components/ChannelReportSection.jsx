@@ -1,12 +1,11 @@
 "use client";
 
-import { PageShell, PageTitle, StatCard, StatCardRow, CsvTable, ImageSlot, Footer } from "./ReportUI";
+import { PageShell, PageTitle, StatCard, StatCardRow, AutoTable, ImageSlot, Footer } from "./ReportUI";
 
-export default function ChannelReportSection({ channel, data, hotelName }) {
+function OverviewSlide({ channel, data, hotelName }) {
   return (
     <PageShell>
       <PageTitle kicker={channel.kicker} title={channel.title} />
-
       {channel.kpis.length > 0 && (
         <StatCardRow>
           {channel.kpis.map((k) => (
@@ -14,18 +13,62 @@ export default function ChannelReportSection({ channel, data, hotelName }) {
           ))}
         </StatCardRow>
       )}
-
-      {channel.tables.map((t) => {
-        const rows = data.tables[t.key];
-        if (!rows || rows.length === 0) return null;
-        return <CsvTable key={t.key} label={t.label} rows={rows} />;
-      })}
-
-      {channel.images.map((img) => (
-        <ImageSlot key={img.key} label={img.label} src={data.images[img.key]} />
-      ))}
-
       <Footer hotelName={hotelName} />
     </PageShell>
   );
+}
+
+function GroupSlide({ channel, group, data, hotelName }) {
+  const tablesInGroup = group.tableKeys.map((k) => channel.tables.find((t) => t.key === k)).filter(Boolean);
+  return (
+    <PageShell>
+      <PageTitle kicker={channel.kicker} title={group.title} />
+      {tablesInGroup.map((t) => {
+        const rows = data.tables[t.key];
+        if (!rows || rows.length === 0) return null;
+        return <AutoTable key={t.key} label={t.label} table={t} rows={rows} />;
+      })}
+      <Footer hotelName={hotelName} />
+    </PageShell>
+  );
+}
+
+function SimpleSlide({ channel, data, hotelName }) {
+  return (
+    <PageShell>
+      <PageTitle kicker={channel.kicker} title={channel.title} />
+      {channel.kpis.length > 0 && (
+        <StatCardRow>
+          {channel.kpis.map((k) => (
+            <StatCard key={k.key} label={k.label} value={data.kpis[k.key]} />
+          ))}
+        </StatCardRow>
+      )}
+      {channel.tables.map((t) => {
+        const rows = data.tables[t.key];
+        if (!rows || rows.length === 0) return null;
+        return <AutoTable key={t.key} label={t.label} table={t} rows={rows} />;
+      })}
+      {channel.images.map((img) => (
+        <ImageSlot key={img.key} label={img.label} src={data.images[img.key]} />
+      ))}
+      <Footer hotelName={hotelName} />
+    </PageShell>
+  );
+}
+
+export default function ChannelReportSection({ channel, data, hotelName }) {
+  if (channel.slideGroups) {
+    return (
+      <>
+        {channel.kpis.length > 0 && <OverviewSlide channel={channel} data={data} hotelName={hotelName} />}
+        {channel.slideGroups.map((group) => {
+          const hasData = group.tableKeys.some((k) => data.tables[k] && data.tables[k].length > 0);
+          if (!hasData) return null;
+          return <GroupSlide key={group.title} channel={channel} group={group} data={data} hotelName={hotelName} />;
+        })}
+      </>
+    );
+  }
+  return <SimpleSlide channel={channel} data={data} hotelName={hotelName} />;
 }
