@@ -1,6 +1,7 @@
 "use client";
 
-import { PageShell, PageTitle, StatCard, StatCardRow, AutoTable, ImageSlot, Footer } from "./ReportUI";
+import { PageShell, PageTitle, StatCard, StatCardRow, AutoTable, CsvTable, ImageSlot, Footer } from "./ReportUI";
+import { buildNaverMediaBreakdownTable } from "../lib/channels";
 
 function OverviewSlide({ channel, data, hotelName }) {
   return (
@@ -19,6 +20,17 @@ function OverviewSlide({ channel, data, hotelName }) {
 }
 
 function GroupSlide({ channel, group, data, hotelName }) {
+  if (group.type === "mediaBreakdown") {
+    const { mediaTable } = buildNaverMediaBreakdownTable(data);
+    return (
+      <PageShell>
+        <PageTitle kicker={channel.kicker} title={group.title} />
+        <CsvTable label="PC / 모바일 매체 비중" rows={mediaTable} />
+        <Footer hotelName={hotelName} />
+      </PageShell>
+    );
+  }
+
   const tablesInGroup = group.tableKeys.map((k) => channel.tables.find((t) => t.key === k)).filter(Boolean);
   return (
     <PageShell>
@@ -63,7 +75,10 @@ export default function ChannelReportSection({ channel, data, hotelName }) {
       <>
         {channel.kpis.length > 0 && <OverviewSlide channel={channel} data={data} hotelName={hotelName} />}
         {channel.slideGroups.map((group) => {
-          const hasData = group.tableKeys.some((k) => data.tables[k] && data.tables[k].length > 0);
+          const hasData =
+            group.type === "mediaBreakdown"
+              ? !!(data.tables?.pcSummary || data.tables?.moSummary)
+              : group.tableKeys.some((k) => data.tables[k] && data.tables[k].length > 0);
           if (!hasData) return null;
           return <GroupSlide key={group.title} channel={channel} group={group} data={data} hotelName={hotelName} />;
         })}
