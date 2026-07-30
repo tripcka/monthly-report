@@ -155,6 +155,8 @@ export default function Page() {
             channel={ch}
             data={channelData[ch.id]}
             onChange={(next) => updateChannel(ch.id, next)}
+            hotelName={hotelName}
+            month={month}
           />
         ))}
       </div>
