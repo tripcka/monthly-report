@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Papa from "papaparse";
 import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
 
-export default function ChannelPanel({ channel, data, onChange }) {
+export default function ChannelPanel({ channel, data, onChange, hotelName, month }) {
+  const [igStatus, setIgStatus] = useState(null); // { type: 'loading'|'done'|'error', message }
+
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
   }
@@ -27,6 +30,31 @@ export default function ChannelPanel({ channel, data, onChange }) {
     });
   }
 
+  async function handleInstagramFetch() {
+    if (!hotelName || !month) {
+      setIgStatus({ type: "error", message: "호텔명과 보고 월을 먼저 입력해주세요." });
+      return;
+    }
+    setIgStatus({ type: "loading", message: "인스타그램에서 불러오는 중..." });
+    try {
+      const params = new URLSearchParams({ hotel: hotelName, month });
+      const res = await fetch(`/api/instagram?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "불러오기 실패");
+      onChange({
+        ...data,
+        kpis: { ...data.kpis, ...json.kpis },
+        tables: { ...data.tables, ...json.tables },
+      });
+      setIgStatus({
+        type: "done",
+        message: `완료 — 게시물 ${json.meta?.postCount ?? 0}건 (@${json.account?.username || ""})`,
+      });
+    } catch (e) {
+      setIgStatus({ type: "error", message: e.message || String(e) });
+    }
+  }
+
   return (
     <details className="border border-lightgray rounded-lg mb-3 bg-white open:shadow-sm">
       <summary className="px-4 py-3 cursor-pointer font-bold text-navy flex items-center justify-between">
@@ -36,6 +64,30 @@ export default function ChannelPanel({ channel, data, onChange }) {
         </span>
       </summary>
       <div className="px-4 pb-4 space-y-4">
+        {channel.id === "instagram" && (
+          <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5]">
+            <div className="text-xs font-bold text-graytxt mb-2">
+              계정 인사이트 + 게시물별 성과 자동 불러오기 (계정 인사이트/게시물_릴스 인사이트 CSV 업로드 대체)
+            </div>
+            <button
+              onClick={handleInstagramFetch}
+              disabled={igStatus?.type === "loading"}
+              className="w-full bg-navy text-white font-bold rounded-md py-2 text-sm disabled:opacity-50"
+            >
+              {igStatus?.type === "loading" ? igStatus.message : "인스타그램 자동 불러오기"}
+            </button>
+            {igStatus?.type === "done" && (
+              <div className="text-xs text-green-700 mt-2">✓ {igStatus.message}</div>
+            )}
+            {igStatus?.type === "error" && (
+              <div className="text-xs text-red-600 mt-2 whitespace-pre-wrap">⚠ {igStatus.message}</div>
+            )}
+            <div className="text-[10px] text-muted mt-2">
+              "주제", "프로필방문", 이미지 게시물 "조회수"는 API로 채울 수 없어 "-"로 남습니다. 아래 표에서 직접 수정하세요.
+            </div>
+          </div>
+        )}
+
         {channel.uploads && channel.uploads.length > 0 && (
           <div>
             <div className="text-xs font-bold text-graytxt mb-2">
