@@ -7,7 +7,8 @@ import {
   getMediaInsights,
 } from "../../../lib/instagramApi";
 import { fmt } from "../../../lib/parsers/utils";
-import { parseYearMonth, monthRange } from "../../../lib/monthUtil";
+import { parseYearMonth, monthRange, toKstMD } from "../../../lib/monthUtil";
+import { buildInstagramPostsTable } from "../../../lib/postsTable";
 
 // GET /api/instagram?hotel=SL호텔강릉&month=2026년 7월
 // 액세스 토큰은 서버 환경변수에서만 읽고 응답에는 절대 포함하지 않는다.
@@ -71,26 +72,22 @@ export async function GET(request) {
       profileActivity30d: "-",
     };
 
-    const postsTable = [
-      ["업로드일", "유형", "주제", "조회수", "도달수", "좋아요", "댓글", "저장", "공유", "프로필방문"],
-    ];
-    mediaWithInsights
+    const postsInput = mediaWithInsights
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .forEach((m) => {
-        const type = m.media_type === "VIDEO" || m.media_product_type === "REELS" ? "릴스" : "게시물";
-        postsTable.push([
-          m.timestamp.slice(0, 10),
-          type,
-          "-", // 주제는 담당자가 수동으로 분류해서 채우던 항목 (API로 대체 불가)
-          m._insights.views === "-" ? "-" : fmt(m._insights.views),
-          m._insights.reach === "-" ? "-" : fmt(m._insights.reach),
-          fmt(Number(m.like_count) || 0),
-          fmt(Number(m.comments_count) || 0),
-          m._insights.saved === "-" ? "-" : fmt(m._insights.saved),
-          m._insights.shares === "-" ? "-" : fmt(m._insights.shares),
-          "-", // 프로필방문은 게시물 단위 지표가 API에 없음
-        ]);
-      });
+      .map((m) => ({
+        date: toKstMD(m.timestamp),
+        topic: "-", // 담당자가 수동으로 분류해서 채우던 항목 (API로 대체 불가)
+        isAd: "-", // 광고 진행 여부는 Marketing API 권한이 없어 자동 판별 불가, 수동 입력 필요
+        views: m._insights.views === "-" ? "-" : fmt(m._insights.views),
+        reach: m._insights.reach === "-" ? "-" : fmt(m._insights.reach),
+        likes: fmt(Number(m.like_count) || 0),
+        comments: fmt(Number(m.comments_count) || 0),
+        saved: m._insights.saved === "-" ? "-" : fmt(m._insights.saved),
+        shares: m._insights.shares === "-" ? "-" : fmt(m._insights.shares),
+        profileActivity: "-", // 게시물 단위 프로필 활동 지표는 API에 없음
+        adCost: "-", // 광고비는 Meta Ads Manager에서 수동 확인 필요
+      }));
+    const postsTable = buildInstagramPostsTable(postsInput);
 
     return NextResponse.json({
       account: { label: account.label, igUserId: account.igUserId, username: summary.username },

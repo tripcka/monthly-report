@@ -83,7 +83,7 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
               <div className="text-xs text-red-600 mt-2 whitespace-pre-wrap">⚠ {igStatus.message}</div>
             )}
             <div className="text-[10px] text-muted mt-2">
-              "주제", "프로필방문", 이미지 게시물 "조회수"는 API로 채울 수 없어 "-"로 남습니다. 아래 표에서 직접 수정하세요.
+              "피드주제", "광고 진행여부", "광고비", "프로필 활동 수", 이미지 게시물 "조회수"는 API로 채울 수 없어 "-"로 남습니다. CSV로 직접 채워서 다시 업로드하거나 PPTX에서 수정하세요.
             </div>
           </div>
         )}
