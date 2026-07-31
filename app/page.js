@@ -172,6 +172,7 @@ export default function Page() {
             key={ch.id}
             channel={ch}
             data={channelData[ch.id]}
+            reportMonth={month}
             onChange={(next) => updateChannel(ch.id, next)}
           />
         ))}

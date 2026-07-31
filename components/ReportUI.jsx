@@ -88,7 +88,11 @@ export function CsvTable({ label, rows }) {
               <tr key={ri} className={ri % 2 === 0 ? "bg-[#FAF8F5]" : "bg-white"}>
                 {row.map((cell, ci) => (
                   <td key={ci} className="px-3 py-1.5 text-center border-t border-lightgray whitespace-nowrap">
-                    {cell}
+                    {/^https?:\/\//i.test(String(cell || "")) ? (
+                      <a href={cell} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+                        바로가기
+                      </a>
+                    ) : cell}
                   </td>
                 ))}
               </tr>

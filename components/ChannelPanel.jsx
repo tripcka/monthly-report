@@ -10,10 +10,19 @@ import { buildInstagramPostsTable } from "../lib/postsTable";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "아니오", adCost: "", text: "" };
 
-export default function ChannelPanel({ channel, data, onChange }) {
+function reportMonthToInput(value = "") {
+  const match = String(value).match(/(\d{4})\D+(\d{1,2})/);
+  if (!match) return "";
+  return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}`;
+}
+
+export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   const [igStatus, setIgStatus] = useState(null);
   const [igPasteText, setIgPasteText] = useState("");
   const [postInsights, setPostInsights] = useState([{ ...EMPTY_POST_INSIGHT }]);
+  const [blogUrl, setBlogUrl] = useState("");
+  const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
+  const [blogStatus, setBlogStatus] = useState(null);
 
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
@@ -85,6 +94,57 @@ export default function ChannelPanel({ channel, data, onChange }) {
     const rows = (data.tables[tableKey] || defaults[tableKey]).map((row) => [...row]);
     rows[rowIndex][colIndex] = value;
     onChange({ ...data, tables: { ...data.tables, [tableKey]: rows } });
+  }
+
+  async function handleLoadBlogPosts() {
+    const yearMonth = blogYearMonth || reportMonthToInput(reportMonth);
+    if (!blogUrl.trim() || !yearMonth) {
+      setBlogStatus({ type: "error", message: "블로그 주소와 조회 연월을 입력해 주세요." });
+      return;
+    }
+    setBlogStatus({ type: "loading", message: "공개 포스팅을 불러오는 중..." });
+    try {
+      const response = await fetch("/api/blog-posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blogUrl: blogUrl.trim(), yearMonth }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "블로그 글을 불러오지 못했습니다.");
+      const rows = [
+        ["업로드 일자", "제목", "포스팅 링크"],
+        ...result.posts.map((post) => [post.date, post.title, post.link]),
+      ];
+      onChange({
+        ...data,
+        kpis: { ...data.kpis, postCount: String(result.posts.length) },
+        tables: { ...data.tables, posts: rows },
+      });
+      setBlogStatus({
+        type: "done",
+        message: result.posts.length > 0
+          ? `${yearMonth} 포스팅 ${result.posts.length}건을 반영했습니다.`
+          : `${yearMonth}에 공개된 포스팅이 없습니다.`,
+      });
+    } catch (error) {
+      setBlogStatus({ type: "error", message: error.message || String(error) });
+    }
+  }
+
+  function patchBlogPost(rowIndex, colIndex, value) {
+    const rows = (data.tables.posts || [["업로드 일자", "제목", "포스팅 링크"]]).map((row) => [...row]);
+    rows[rowIndex][colIndex] = value;
+    onChange({ ...data, tables: { ...data.tables, posts: rows } });
+  }
+
+  function removeBlogPost(rowIndex) {
+    const rows = data.tables.posts.filter((_, index) => index !== rowIndex);
+    const count = Math.max(0, rows.length - 1);
+    onChange({
+      ...data,
+      kpis: { ...data.kpis, postCount: String(count) },
+      tables: { ...data.tables, posts: rows },
+    });
   }
 
   return (
@@ -192,6 +252,39 @@ export default function ChannelPanel({ channel, data, onChange }) {
           </div>
         )}
 
+        {channel.id === "brandBlog" && (
+          <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5] space-y-3">
+            <div className="text-xs font-bold text-graytxt">해당 월 포스팅 자동 불러오기</div>
+            <input
+              type="url"
+              placeholder="브랜드 블로그 주소"
+              value={blogUrl}
+              onChange={(e) => setBlogUrl(e.target.value)}
+              className="border border-lightgray rounded-md px-3 py-2 text-xs w-full bg-white"
+            />
+            <input
+              type="month"
+              value={blogYearMonth || reportMonthToInput(reportMonth)}
+              onChange={(e) => setBlogYearMonth(e.target.value)}
+              className="border border-lightgray rounded-md px-3 py-2 text-xs w-full bg-white"
+            />
+            <button
+              onClick={handleLoadBlogPosts}
+              disabled={blogStatus?.type === "loading"}
+              className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm disabled:opacity-50"
+            >
+              {blogStatus?.type === "loading" ? blogStatus.message : "포스팅 불러오기"}
+            </button>
+            <div className="text-[10px] text-muted">
+              공개 RSS/Atom 기준으로 업로드 일자·제목·링크를 가져옵니다. 네이버 블로그 주소는 RSS로 자동 변환됩니다.
+            </div>
+            {blogStatus?.type === "done" && <div className="text-xs text-green-700">✓ {blogStatus.message}</div>}
+            {blogStatus?.type === "error" && (
+              <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {blogStatus.message}</div>
+            )}
+          </div>
+        )}
+
         {channel.uploads && channel.uploads.length > 0 && (
           <div>
             <div className="text-xs font-bold text-graytxt mb-2">
@@ -263,6 +356,41 @@ export default function ChannelPanel({ channel, data, onChange }) {
                   />
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {channel.id === "brandBlog" && data.tables.posts?.length > 1 && (
+          <div>
+            <div className="text-xs font-bold text-graytxt mb-2">불러온 포스팅 (직접 수정·삭제 가능)</div>
+            <div className="space-y-2">
+              {data.tables.posts.slice(1).map((row, index) => {
+                const rowIndex = index + 1;
+                return (
+                  <div key={`${row[2]}-${rowIndex}`} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        value={row[0] || ""}
+                        onChange={(e) => patchBlogPost(rowIndex, 0, e.target.value)}
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs w-[110px]"
+                      />
+                      <button onClick={() => removeBlogPost(rowIndex)} className="ml-auto text-[10px] text-red-600">
+                        삭제
+                      </button>
+                    </div>
+                    <input
+                      value={row[1] || ""}
+                      onChange={(e) => patchBlogPost(rowIndex, 1, e.target.value)}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                    />
+                    <input
+                      value={row[2] || ""}
+                      onChange={(e) => patchBlogPost(rowIndex, 2, e.target.value)}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs w-full text-blue-700"
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
