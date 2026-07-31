@@ -16,10 +16,28 @@ const DEFAULT_STATE = {
   channelData: emptyChannelData(),
 };
 
+// 저장된 초안(localStorage)이 이전 버전의 채널 구성으로 만들어졌을 수 있으므로
+// (예: 그 사이에 "네이버 플레이스 광고" 같은 채널이 새로 추가됨), 복원 시 현재 CHANNELS
+// 기준으로 채널별 데이터가 다 있는지 보정한다. 없는 채널은 빈 데이터로 채우고,
+// 지금은 없는(삭제된) 채널의 예전 데이터는 조용히 버린다.
+function migrateDraft(saved, defaults) {
+  const savedChannelData = saved?.channelData || {};
+  const channelData = {};
+  for (const ch of CHANNELS) {
+    const savedForChannel = savedChannelData[ch.id];
+    channelData[ch.id] = {
+      kpis: { ...(savedForChannel?.kpis || {}) },
+      tables: { ...(savedForChannel?.tables || {}) },
+      images: { ...(savedForChannel?.images || {}) },
+    };
+  }
+  return { ...defaults, ...saved, channelData };
+}
+
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 export default function Page() {
-  const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE);
+  const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE, migrateDraft);
   const [exporting, setExporting] = useState(false);
   const [driveStatus, setDriveStatus] = useState(null); // { type: 'saving'|'done'|'error', message }
 
