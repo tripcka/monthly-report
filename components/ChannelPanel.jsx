@@ -172,11 +172,17 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
     const result = mergeBlogInsights(data.tables.posts, parsed);
     onChange({ ...data, tables: { ...data.tables, posts: result.rows } });
 
-    const messages = [`포스팅 ${result.matchedPostCount}건에 조회수·유입 키워드를 반영했습니다.`];
-    if (result.unmatchedFiles.length > 0) messages.push(`제목 불일치 ${result.unmatchedFiles.length}개: ${result.unmatchedFiles.join(", ")}`);
+    const messages = [`엑셀 내부 제목 기준으로 포스팅 ${result.matchedPostCount}건에 조회수·유입 키워드를 반영했습니다.`];
+    if (result.unmatched.length > 0) {
+      messages.push(
+        `제목 불일치 ${result.unmatched.length}건:\n${result.unmatched
+          .map(({ title }) => `- ${title}`)
+          .join("\n")}`
+      );
+    }
     if (errors.length > 0) messages.push(errors.join("\n"));
     setBlogInsightStatus({
-      type: result.unmatchedFiles.length > 0 || errors.length > 0 ? "error" : "done",
+      type: result.unmatched.length > 0 || errors.length > 0 ? "error" : "done",
       message: messages.join("\n"),
     });
   }
@@ -332,7 +338,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                 />
               </label>
               <div className="text-[10px] text-muted">
-                포스팅 제목을 기준으로 조회수와 상위 유입 키워드 5개를 자동 매칭합니다.
+                파일명이 아닌 각 엑셀 시트 내부의 ‘게시물 제목’을 기준으로, 불러온 포스팅에 조회수와 상위 유입 키워드 5개를 자동 매칭합니다.
               </div>
               {blogInsightStatus?.type === "loading" && <div className="text-xs text-graytxt">{blogInsightStatus.message}</div>}
               {blogInsightStatus?.type === "done" && (
