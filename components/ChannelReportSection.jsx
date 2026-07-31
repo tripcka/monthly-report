@@ -5,10 +5,8 @@ import { buildNaverMediaBreakdownTable } from "../lib/channels";
 import { toImgArray } from "../lib/imageUtils";
 
 function groupHasData(group, data) {
-  if (group.title === "계정 인사이트 상세") {
-    const detailKeys = ["reach30d", "engagedAccounts30d", "profileVisits30d", "linkClicks30d", "addressClicks30d"];
-    if (detailKeys.some((key) => data.kpis?.[key])) return true;
-  }
+  if ((group.kpiKeys || []).some((key) => data.kpis?.[key])) return true;
+  if ((group.kpiDetail?.keys || []).some((key) => data.kpis?.[key])) return true;
   if (group.type === "mediaBreakdown") {
     return !!(data.tables?.pcSummary?.length > 0 || data.tables?.moSummary?.length > 0);
   }
@@ -38,10 +36,26 @@ function GroupContent({ channel, group, data }) {
     <>
       <SectionTitle text={group.title} />
       {tablesInGroup.map((t) => {
-        const rows = data.tables[t.key];
+        const sourceRows = data.tables[t.key];
+        const rowIndexes = group.tableRows?.[t.key];
+        const rows = rowIndexes ? rowIndexes.map((index) => sourceRows?.[index]).filter(Boolean) : sourceRows;
         if (!rows || rows.length === 0) return null;
         return <AutoTable key={t.key} label={null} table={t} rows={rows} />;
       })}
+      {group.kpiDetail && (
+        <>
+          <SectionTitle text={group.kpiDetail.title} />
+          <CsvTable
+            rows={[
+              ["구분", "수치"],
+              ...group.kpiDetail.keys.map((key) => {
+                const kpi = channel.kpis.find((item) => item.key === key);
+                return [kpi?.label || key, data.kpis?.[key] || "-"];
+              }),
+            ]}
+          />
+        </>
+      )}
       {imagesInGroup.map((img) => (
         <ImageSlot key={img.key} label={img.label} src={data.images[img.key]} showHeading={!soleImageIsOnlyContent} />
       ))}
@@ -75,9 +89,9 @@ function OverviewSlide({ channel, mergeGroups, data, hotelName }) {
 }
 
 function GroupSlide({ channel, group, data, hotelName }) {
-  const detailKpis = group.title === "계정 인사이트 상세"
-    ? channel.kpis.filter((k) => k.detailOnly && data.kpis[k.key])
-    : [];
+  const detailKpis = (group.kpiKeys || [])
+    .map((key) => channel.kpis.find((k) => k.key === key))
+    .filter(Boolean);
   return (
     <PageShell>
       <PageTitle kicker={channel.kicker} title={channel.title} />
