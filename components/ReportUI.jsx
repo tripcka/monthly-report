@@ -41,16 +41,16 @@ export function SectionTitle({ text }) {
 
 export function StatCard({ label, value, sub, accent = "text-orange" }) {
   return (
-    <div className="bg-card border border-lightgray rounded-lg p-4 flex-1 min-w-[180px]">
-      <div className="text-graytxt text-xs font-bold mb-2">{label}</div>
-      <div className={`text-2xl font-bold mb-2 ${accent}`}>{value || "-"}</div>
+    <div className="bg-card border border-lightgray rounded-lg px-4 pt-3 pb-2.5 flex-1 min-w-[180px]">
+      <div className="text-graytxt text-xs font-bold mb-1.5">{label}</div>
+      <div className={`text-2xl font-bold ${sub ? "mb-1.5" : ""} ${accent}`}>{value || "-"}</div>
       {sub ? <div className="text-graytxt text-[11px] leading-snug">{sub}</div> : null}
     </div>
   );
 }
 
 export function StatCardRow({ children }) {
-  return <div className="flex gap-3 flex-wrap mb-6">{children}</div>;
+  return <div className="flex gap-3 flex-wrap mb-4">{children}</div>;
 }
 
 export function SummaryBox({ title, body }) {

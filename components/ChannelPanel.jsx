@@ -4,12 +4,16 @@ import { useState } from "react";
 import Papa from "papaparse";
 import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
-import { parseInstagramInsightText } from "../lib/parsers/instagramPaste";
+import { parseInstagramInsightText, parseInstagramPostInsightText } from "../lib/parsers/instagramPaste";
 import { toImgArray } from "../lib/imageUtils";
+import { buildInstagramPostsTable } from "../lib/postsTable";
 
-export default function ChannelPanel({ channel, data, onChange, hotelName, month }) {
-  const [igStatus, setIgStatus] = useState(null); // { type: 'loading'|'done'|'error', message }
+const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "아니오", adCost: "", text: "" };
+
+export default function ChannelPanel({ channel, data, onChange }) {
+  const [igStatus, setIgStatus] = useState(null);
   const [igPasteText, setIgPasteText] = useState("");
+  const [postInsights, setPostInsights] = useState([{ ...EMPTY_POST_INSIGHT }]);
 
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
@@ -38,31 +42,6 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
     });
   }
 
-  async function handleInstagramFetch() {
-    if (!hotelName || !month) {
-      setIgStatus({ type: "error", message: "호텔명과 보고 월을 먼저 입력해주세요." });
-      return;
-    }
-    setIgStatus({ type: "loading", message: "인스타그램에서 불러오는 중..." });
-    try {
-      const params = new URLSearchParams({ hotel: hotelName, month });
-      const res = await fetch(`/api/instagram?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "불러오기 실패");
-      onChange({
-        ...data,
-        kpis: { ...data.kpis, ...json.kpis },
-        tables: { ...data.tables, ...json.tables },
-      });
-      setIgStatus({
-        type: "done",
-        message: `완료 — 게시물 ${json.meta?.postCount ?? 0}건 (@${json.account?.username || ""})`,
-      });
-    } catch (e) {
-      setIgStatus({ type: "error", message: e.message || String(e) });
-    }
-  }
-
   function handleInstagramPaste() {
     const { kpis, tables } = parseInstagramInsightText(igPasteText);
     const foundCount = Object.keys(kpis).length + Object.keys(tables).length;
@@ -76,6 +55,22 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
       tables: { ...data.tables, ...tables },
     });
     setIgStatus({ type: "done", message: `붙여넣기 분석 완료 — ${foundCount}개 항목/표 반영` });
+  }
+
+  function patchPostInsight(index, patch) {
+    setPostInsights((current) => current.map((post, i) => (i === index ? { ...post, ...patch } : post)));
+  }
+
+  function handlePostInsightsPaste() {
+    const posts = postInsights
+      .map((post) => parseInstagramPostInsightText(post.text, post))
+      .filter(Boolean);
+    if (posts.length === 0) {
+      setIgStatus({ type: "error", message: "인식할 수 있는 게시물 인사이트가 없습니다." });
+      return;
+    }
+    onChange({ ...data, tables: { ...data.tables, posts: buildInstagramPostsTable(posts) } });
+    setIgStatus({ type: "done", message: `게시물 인사이트 ${posts.length}건 반영 완료` });
   }
 
   function setInstagramDetail(tableKey, rowIndex, colIndex, value) {
@@ -105,12 +100,12 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
           <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5] space-y-3">
             <div>
               <div className="text-xs font-bold text-graytxt mb-2">
-                계정·게시물 인사이트 붙여넣기
+                계정 인사이트 붙여넣기
               </div>
               <textarea
                 value={igPasteText}
                 onChange={(e) => setIgPasteText(e.target.value)}
-                placeholder="인스타그램 인사이트에서 복사한 내용을 그대로 붙여넣으세요."
+                placeholder="인스타그램 계정 인사이트에서 복사한 내용을 그대로 붙여넣으세요."
                 className="border border-lightgray rounded-md px-3 py-2 text-xs w-full h-36 resize-y bg-white"
               />
               <button
@@ -120,26 +115,79 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
                 붙여넣은 내용 자동 분석
               </button>
             </div>
-            <div className="border-t border-lightgray pt-3">
-            <div className="text-xs font-bold text-graytxt mb-2">
-              계정 인사이트 + 게시물별 성과 자동 불러오기 (계정 인사이트/게시물_릴스 인사이트 CSV 업로드 대체)
-            </div>
-            <button
-              onClick={handleInstagramFetch}
-              disabled={igStatus?.type === "loading"}
-              className="w-full bg-navy text-white font-bold rounded-md py-2 text-sm disabled:opacity-50"
-            >
-              {igStatus?.type === "loading" ? igStatus.message : "인스타그램 자동 불러오기"}
-            </button>
-            {igStatus?.type === "done" && (
-              <div className="text-xs text-green-700 mt-2">✓ {igStatus.message}</div>
-            )}
-            {igStatus?.type === "error" && (
-              <div className="text-xs text-red-600 mt-2 whitespace-pre-wrap">⚠ {igStatus.message}</div>
-            )}
-            <div className="text-[10px] text-muted mt-2">
-              "피드주제", "광고 진행여부", "광고비", "프로필 활동 수", 이미지 게시물 "조회수"는 API로 채울 수 없어 "-"로 남습니다. CSV로 직접 채워서 다시 업로드하거나 PPTX에서 수정하세요.
-            </div>
+            <div className="border-t border-lightgray pt-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-graytxt">게시물 인사이트 붙여넣기 (최대 6개)</div>
+                {postInsights.length < 6 && (
+                  <button
+                    onClick={() => setPostInsights((current) => [...current, { ...EMPTY_POST_INSIGHT }])}
+                    className="text-[11px] font-bold text-orange"
+                  >
+                    + 게시물 추가
+                  </button>
+                )}
+              </div>
+              {postInsights.map((post, index) => (
+                <div key={index} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-navy">게시물 {index + 1}</span>
+                    {postInsights.length > 1 && (
+                      <button
+                        onClick={() => setPostInsights((current) => current.filter((_, i) => i !== index))}
+                        className="text-[10px] text-red-600"
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      placeholder="업로드일"
+                      value={post.date}
+                      onChange={(e) => patchPostInsight(index, { date: e.target.value })}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs"
+                    />
+                    <input
+                      placeholder="피드 주제"
+                      value={post.topic}
+                      onChange={(e) => patchPostInsight(index, { topic: e.target.value })}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs"
+                    />
+                    <select
+                      value={post.isAd}
+                      onChange={(e) => patchPostInsight(index, { isAd: e.target.value })}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs bg-white"
+                    >
+                      <option>아니오</option>
+                      <option>예</option>
+                    </select>
+                    <input
+                      placeholder="광고비 (선택)"
+                      value={post.adCost}
+                      onChange={(e) => patchPostInsight(index, { adCost: e.target.value })}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs"
+                    />
+                  </div>
+                  <textarea
+                    value={post.text}
+                    onChange={(e) => patchPostInsight(index, { text: e.target.value })}
+                    placeholder="이 게시물의 인사이트 원문을 붙여넣으세요."
+                    className="border border-lightgray rounded px-2 py-1.5 text-xs w-full h-24 resize-y"
+                  />
+                </div>
+              ))}
+              <button
+                onClick={handlePostInsightsPaste}
+                className="w-full bg-navy text-white font-bold rounded-md py-2 text-sm"
+              >
+                게시물 인사이트 표에 반영
+              </button>
+              {igStatus?.type === "done" && (
+                <div className="text-xs text-green-700">✓ {igStatus.message}</div>
+              )}
+              {igStatus?.type === "error" && (
+                <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {igStatus.message}</div>
+              )}
             </div>
           </div>
         )}
