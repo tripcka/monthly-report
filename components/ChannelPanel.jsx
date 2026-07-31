@@ -4,10 +4,12 @@ import { useState } from "react";
 import Papa from "papaparse";
 import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
+import { parseInstagramInsightText } from "../lib/parsers/instagramPaste";
 import { toImgArray } from "../lib/imageUtils";
 
 export default function ChannelPanel({ channel, data, onChange, hotelName, month }) {
   const [igStatus, setIgStatus] = useState(null); // { type: 'loading'|'done'|'error', message }
+  const [igPasteText, setIgPasteText] = useState("");
 
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
@@ -61,6 +63,35 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
     }
   }
 
+  function handleInstagramPaste() {
+    const { kpis, tables } = parseInstagramInsightText(igPasteText);
+    const foundCount = Object.keys(kpis).length + Object.keys(tables).length;
+    if (!igPasteText.trim() || foundCount === 0) {
+      setIgStatus({ type: "error", message: "인식할 수 있는 인사이트 항목이 없습니다. 복사한 원문 전체를 붙여넣어 주세요." });
+      return;
+    }
+    onChange({
+      ...data,
+      kpis: { ...data.kpis, ...kpis },
+      tables: { ...data.tables, ...tables },
+    });
+    setIgStatus({ type: "done", message: `붙여넣기 분석 완료 — ${foundCount}개 항목/표 반영` });
+  }
+
+  function setInstagramDetail(tableKey, rowIndex, colIndex, value) {
+    const defaults = {
+      audienceDetails: [["팔로워 상세 정보", "분포"], ["연령대", "-"], ["성별", "-"]],
+      accountComposition: [
+        ["구분", "팔로워", "팔로워가 아닌 사람"],
+        ["조회한 계정", "-", "-"],
+        ["반응한 계정", "-", "-"],
+      ],
+    };
+    const rows = (data.tables[tableKey] || defaults[tableKey]).map((row) => [...row]);
+    rows[rowIndex][colIndex] = value;
+    onChange({ ...data, tables: { ...data.tables, [tableKey]: rows } });
+  }
+
   return (
     <details className="border border-lightgray rounded-lg mb-3 bg-white open:shadow-sm">
       <summary className="px-4 py-3 cursor-pointer font-bold text-navy flex items-center justify-between">
@@ -71,7 +102,25 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
       </summary>
       <div className="px-4 pb-4 space-y-4">
         {channel.id === "instagram" && (
-          <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5]">
+          <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5] space-y-3">
+            <div>
+              <div className="text-xs font-bold text-graytxt mb-2">
+                계정·게시물 인사이트 붙여넣기
+              </div>
+              <textarea
+                value={igPasteText}
+                onChange={(e) => setIgPasteText(e.target.value)}
+                placeholder="인스타그램 인사이트에서 복사한 내용을 그대로 붙여넣으세요."
+                className="border border-lightgray rounded-md px-3 py-2 text-xs w-full h-36 resize-y bg-white"
+              />
+              <button
+                onClick={handleInstagramPaste}
+                className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm mt-2"
+              >
+                붙여넣은 내용 자동 분석
+              </button>
+            </div>
+            <div className="border-t border-lightgray pt-3">
             <div className="text-xs font-bold text-graytxt mb-2">
               계정 인사이트 + 게시물별 성과 자동 불러오기 (계정 인사이트/게시물_릴스 인사이트 CSV 업로드 대체)
             </div>
@@ -90,6 +139,7 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
             )}
             <div className="text-[10px] text-muted mt-2">
               "피드주제", "광고 진행여부", "광고비", "프로필 활동 수", 이미지 게시물 "조회수"는 API로 채울 수 없어 "-"로 남습니다. CSV로 직접 채워서 다시 업로드하거나 PPTX에서 수정하세요.
+            </div>
             </div>
           </div>
         )}
@@ -127,6 +177,44 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
                   className="border border-lightgray rounded-md px-3 py-2 text-sm w-full"
                 />
               ))}
+            </div>
+          </div>
+        )}
+
+        {channel.id === "instagram" && (
+          <div>
+            <div className="text-xs font-bold text-graytxt mb-2">
+              계정 인사이트 상세 (자동 입력 후 직접 수정 가능)
+            </div>
+            <div className="space-y-2">
+              <input
+                placeholder="연령대 예: 35-44세(38.5%) > 25-34세(26.8%)"
+                value={data.tables.audienceDetails?.[1]?.[1] || ""}
+                onChange={(e) => setInstagramDetail("audienceDetails", 1, 1, e.target.value)}
+                className="border border-lightgray rounded-md px-3 py-2 text-xs w-full"
+              />
+              <input
+                placeholder="성별 예: 여성(52.4%) > 남성(47.6%)"
+                value={data.tables.audienceDetails?.[2]?.[1] || ""}
+                onChange={(e) => setInstagramDetail("audienceDetails", 2, 1, e.target.value)}
+                className="border border-lightgray rounded-md px-3 py-2 text-xs w-full"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ["조회 팔로워", "accountComposition", 1, 1],
+                  ["조회 비팔로워", "accountComposition", 1, 2],
+                  ["반응 팔로워", "accountComposition", 2, 1],
+                  ["반응 비팔로워", "accountComposition", 2, 2],
+                ].map(([label, tableKey, row, col]) => (
+                  <input
+                    key={label}
+                    placeholder={`${label} 예: 8.4%`}
+                    value={data.tables[tableKey]?.[row]?.[col] || ""}
+                    onChange={(e) => setInstagramDetail(tableKey, row, col, e.target.value)}
+                    className="border border-lightgray rounded-md px-3 py-2 text-xs w-full"
+                  />
+                ))}
+              </div>
             </div>
           </div>
         )}

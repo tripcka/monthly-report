@@ -5,6 +5,10 @@ import { buildNaverMediaBreakdownTable } from "../lib/channels";
 import { toImgArray } from "../lib/imageUtils";
 
 function groupHasData(group, data) {
+  if (group.title === "계정 인사이트 상세") {
+    const detailKeys = ["reach30d", "engagedAccounts30d", "profileVisits30d", "linkClicks30d", "addressClicks30d"];
+    if (detailKeys.some((key) => data.kpis?.[key])) return true;
+  }
   if (group.type === "mediaBreakdown") {
     return !!(data.tables?.pcSummary?.length > 0 || data.tables?.moSummary?.length > 0);
   }
@@ -52,9 +56,9 @@ function OverviewSlide({ channel, mergeGroups, data, hotelName }) {
   return (
     <PageShell>
       <PageTitle kicker={channel.kicker} title={channel.title} />
-      {channel.kpis.length > 0 && (
+      {channel.kpis.filter((k) => !k.detailOnly).length > 0 && (
         <StatCardRow>
-          {channel.kpis.map((k) => (
+          {channel.kpis.filter((k) => !k.detailOnly).map((k) => (
             <StatCard key={k.key} label={k.label} value={data.kpis[k.key]} />
           ))}
         </StatCardRow>
@@ -71,9 +75,17 @@ function OverviewSlide({ channel, mergeGroups, data, hotelName }) {
 }
 
 function GroupSlide({ channel, group, data, hotelName }) {
+  const detailKpis = group.title === "계정 인사이트 상세"
+    ? channel.kpis.filter((k) => k.detailOnly && data.kpis[k.key])
+    : [];
   return (
     <PageShell>
       <PageTitle kicker={channel.kicker} title={channel.title} />
+      {detailKpis.length > 0 && (
+        <StatCardRow>
+          {detailKpis.map((k) => <StatCard key={k.key} label={k.label} value={data.kpis[k.key]} />)}
+        </StatCardRow>
+      )}
       <GroupContent channel={channel} group={group} data={data} />
       <Footer hotelName={hotelName} />
     </PageShell>
@@ -113,7 +125,7 @@ export default function ChannelReportSection({ channel, data, hotelName }) {
     const hasOverviewImages = channel.images.some(
       (img) => !usedImageKeys.has(img.key) && toImgArray(data.images[img.key]).length > 0
     );
-    const showOverview = channel.kpis.length > 0 || mergeGroupsWithData.length > 0 || hasOverviewImages;
+    const showOverview = channel.kpis.some((k) => !k.detailOnly) || mergeGroupsWithData.length > 0 || hasOverviewImages;
 
     return (
       <>
