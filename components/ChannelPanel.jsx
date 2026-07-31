@@ -7,6 +7,13 @@ import { runParser } from "../lib/parsers";
 import { parseInstagramInsightText, parseInstagramPostInsightText } from "../lib/parsers/instagramPaste";
 import { toImgArray } from "../lib/imageUtils";
 import { buildInstagramPostsTable } from "../lib/postsTable";
+import {
+  BLOG_POST_HEADER,
+  ensureBlogPostColumns,
+  mergeBlogInsights,
+  parseBlogInsightWorkbook,
+  sortBlogPostsOldestFirst,
+} from "../lib/blogInsightFiles";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "아니오", adCost: "", text: "" };
 
@@ -23,6 +30,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   const [blogUrl, setBlogUrl] = useState("");
   const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
   const [blogStatus, setBlogStatus] = useState(null);
+  const [blogInsightStatus, setBlogInsightStatus] = useState(null);
 
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
@@ -42,10 +50,14 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
       complete: (result) => {
         const rows = (result.data || []).filter((r) => r.some((c) => String(c).trim() !== ""));
         const { kpis, tables } = runParser(upload, rows);
+        const nextTables = { ...data.tables, ...tables };
+        if (channel.id === "brandBlog" && upload.targetTable === "posts" && nextTables.posts) {
+          nextTables.posts = sortBlogPostsOldestFirst(nextTables.posts);
+        }
         onChange({
           ...data,
           kpis: { ...data.kpis, ...kpis },
-          tables: { ...data.tables, ...tables },
+          tables: nextTables,
         });
       },
     });
@@ -112,13 +124,12 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "블로그 글을 불러오지 못했습니다.");
       const rows = [
-        ["업로드 일자", "제목", "포스팅 링크"],
-        ...result.posts.map((post) => [post.date, post.title, post.link]),
+        BLOG_POST_HEADER,
+        ...result.posts.map((post) => [post.date, post.title, post.link, "", ""]),
       ];
       onChange({
         ...data,
-        kpis: { ...data.kpis, postCount: String(result.posts.length) },
-        tables: { ...data.tables, posts: rows },
+        tables: { ...data.tables, posts: sortBlogPostsOldestFirst(rows) },
       });
       setBlogStatus({
         type: "done",
@@ -132,18 +143,41 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   }
 
   function patchBlogPost(rowIndex, colIndex, value) {
-    const rows = (data.tables.posts || [["업로드 일자", "제목", "포스팅 링크"]]).map((row) => [...row]);
+    const rows = ensureBlogPostColumns(data.tables.posts).map((row) => [...row]);
     rows[rowIndex][colIndex] = value;
-    onChange({ ...data, tables: { ...data.tables, posts: rows } });
+    onChange({ ...data, tables: { ...data.tables, posts: colIndex === 0 ? sortBlogPostsOldestFirst(rows) : rows } });
   }
 
   function removeBlogPost(rowIndex) {
     const rows = data.tables.posts.filter((_, index) => index !== rowIndex);
-    const count = Math.max(0, rows.length - 1);
     onChange({
       ...data,
-      kpis: { ...data.kpis, postCount: String(count) },
       tables: { ...data.tables, posts: rows },
+    });
+  }
+
+  async function handleBlogInsightFiles(files) {
+    const selected = [...files];
+    if (selected.length === 0) return;
+    setBlogInsightStatus({ type: "loading", message: `${selected.length}개 파일 분석 중...` });
+    const parsed = [];
+    const errors = [];
+    for (const file of selected) {
+      try {
+        parsed.push(parseBlogInsightWorkbook(await file.arrayBuffer(), file.name));
+      } catch (error) {
+        errors.push(error.message || `${file.name}: 분석 실패`);
+      }
+    }
+    const result = mergeBlogInsights(data.tables.posts, parsed);
+    onChange({ ...data, tables: { ...data.tables, posts: result.rows } });
+
+    const messages = [`포스팅 ${result.matchedPostCount}건에 조회수·유입 키워드를 반영했습니다.`];
+    if (result.unmatchedFiles.length > 0) messages.push(`제목 불일치 ${result.unmatchedFiles.length}개: ${result.unmatchedFiles.join(", ")}`);
+    if (errors.length > 0) messages.push(errors.join("\n"));
+    setBlogInsightStatus({
+      type: result.unmatchedFiles.length > 0 || errors.length > 0 ? "error" : "done",
+      message: messages.join("\n"),
     });
   }
 
@@ -282,6 +316,32 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
             {blogStatus?.type === "error" && (
               <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {blogStatus.message}</div>
             )}
+            <div className="border-t border-lightgray pt-3 space-y-2">
+              <div className="text-xs font-bold text-graytxt">게시물 통계 엑셀 한 번에 업로드</div>
+              <label className="block border border-dashed border-[#C8C0B6] rounded-md p-3 text-center text-xs cursor-pointer bg-white hover:border-orange">
+                조회수·유입분석 엑셀 여러 개 선택
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    handleBlogInsightFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <div className="text-[10px] text-muted">
+                포스팅 제목을 기준으로 조회수와 상위 유입 키워드 5개를 자동 매칭합니다.
+              </div>
+              {blogInsightStatus?.type === "loading" && <div className="text-xs text-graytxt">{blogInsightStatus.message}</div>}
+              {blogInsightStatus?.type === "done" && (
+                <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {blogInsightStatus.message}</div>
+              )}
+              {blogInsightStatus?.type === "error" && (
+                <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {blogInsightStatus.message}</div>
+              )}
+            </div>
           </div>
         )}
 
@@ -388,6 +448,20 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                       onChange={(e) => patchBlogPost(rowIndex, 2, e.target.value)}
                       className="border border-lightgray rounded px-2 py-1.5 text-xs w-full text-blue-700"
                     />
+                    <div className="grid grid-cols-[140px_1fr] gap-2">
+                      <input
+                        placeholder="조회수"
+                        value={row[3] || ""}
+                        onChange={(e) => patchBlogPost(rowIndex, 3, e.target.value)}
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                      />
+                      <input
+                        placeholder="유입 키워드 5개 (/로 구분)"
+                        value={row[4] || ""}
+                        onChange={(e) => patchBlogPost(rowIndex, 4, e.target.value)}
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                      />
+                    </div>
                   </div>
                 );
               })}
