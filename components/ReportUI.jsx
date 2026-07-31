@@ -119,10 +119,20 @@ export function AutoTable({ label, table, rows }) {
   return <CsvTable label={label} rows={rows} />;
 }
 export function ImageSlot({ label, src }) {
-  if (src) {
+  const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];
+  if (srcs.length > 0) {
     return (
       <div className="mb-6">
-        <img src={src} alt={label} className="max-h-[260px] rounded-md border border-lightgray mx-auto" />
+        <div className="grid grid-cols-3 gap-3">
+          {srcs.map((s, i) => (
+            <img
+              key={i}
+              src={s}
+              alt={`${label} ${i + 1}`}
+              className="max-h-[220px] w-full object-contain rounded-md border border-lightgray bg-white"
+            />
+          ))}
+        </div>
       </div>
     );
   }

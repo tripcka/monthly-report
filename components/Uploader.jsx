@@ -44,21 +44,30 @@ export function CsvUploader({ label, onFile, hasData }) {
   );
 }
 
-export function ImageUploader({ label, onLoaded, hasData }) {
-  function handleFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onLoaded(reader.result);
-    reader.readAsDataURL(file);
+export function ImageUploader({ label, onFilesLoaded, count }) {
+  function handleFiles(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+      )
+    ).then((srcs) => onFilesLoaded(srcs));
+    e.target.value = ""; // 같은 파일 다시 선택해도 onChange가 또 발생하도록 초기화
   }
   return (
     <label className="flex items-center justify-between gap-3 border border-lightgray rounded-md px-3 py-2 cursor-pointer hover:bg-card text-sm">
       <span className="text-graytxt">{label}</span>
-      <span className={`text-xs font-bold ${hasData ? "text-orange" : "text-muted"}`}>
-        {hasData ? "첨부됨 ✓" : "이미지 선택"}
+      <span className={`text-xs font-bold ${count > 0 ? "text-orange" : "text-muted"}`}>
+        {count > 0 ? `${count}장 첨부됨 ✓ (추가 선택 가능)` : "이미지 선택 (여러 장 가능)"}
       </span>
-      <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <input type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
     </label>
   );
 }

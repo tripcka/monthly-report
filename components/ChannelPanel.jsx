@@ -4,6 +4,7 @@ import { useState } from "react";
 import Papa from "papaparse";
 import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
+import { toImgArray } from "../lib/imageUtils";
 
 export default function ChannelPanel({ channel, data, onChange, hotelName, month }) {
   const [igStatus, setIgStatus] = useState(null); // { type: 'loading'|'done'|'error', message }
@@ -11,8 +12,13 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
   }
-  function setImage(key, src) {
-    onChange({ ...data, images: { ...data.images, [key]: src } });
+  function addImages(key, newSrcs) {
+    const existing = toImgArray(data.images[key]);
+    onChange({ ...data, images: { ...data.images, [key]: [...existing, ...newSrcs] } });
+  }
+  function removeImage(key, index) {
+    const existing = toImgArray(data.images[key]);
+    onChange({ ...data, images: { ...data.images, [key]: existing.filter((_, i) => i !== index) } });
   }
 
   function handleCsv(upload, file) {
@@ -135,16 +141,40 @@ export default function ChannelPanel({ channel, data, onChange, hotelName, month
 
         {channel.images.length > 0 && (
           <div>
-            <div className="text-xs font-bold text-graytxt mb-2">이미지 (선택)</div>
-            <div className="space-y-2">
-              {channel.images.map((img) => (
-                <ImageUploader
-                  key={img.key}
-                  label={img.label}
-                  hasData={!!data.images[img.key]}
-                  onLoaded={(src) => setImage(img.key, src)}
-                />
-              ))}
+            <div className="text-xs font-bold text-graytxt mb-2">이미지 (선택, 여러 장 첨부 가능)</div>
+            <div className="space-y-3">
+              {channel.images.map((img) => {
+                const srcs = toImgArray(data.images[img.key]);
+                return (
+                  <div key={img.key}>
+                    <ImageUploader
+                      label={img.label}
+                      count={srcs.length}
+                      onFilesLoaded={(newSrcs) => addImages(img.key, newSrcs)}
+                    />
+                    {srcs.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {srcs.map((src, i) => (
+                          <div key={i} className="relative group">
+                            <img
+                              src={src}
+                              alt={`${img.label} ${i + 1}`}
+                              className="w-full h-16 object-cover rounded-md border border-lightgray"
+                            />
+                            <button
+                              onClick={() => removeImage(img.key, i)}
+                              title="삭제"
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-navy text-white text-xs leading-5 text-center opacity-80 hover:opacity-100"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

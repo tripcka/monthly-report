@@ -2,6 +2,7 @@
 
 import { PageShell, PageTitle, StatCard, StatCardRow, AutoTable, CsvTable, ImageSlot, Footer } from "./ReportUI";
 import { buildNaverMediaBreakdownTable } from "../lib/channels";
+import { toImgArray } from "../lib/imageUtils";
 
 function OverviewSlide({ channel, data, hotelName }) {
   return (
@@ -85,7 +86,7 @@ export default function ChannelReportSection({ channel, data, hotelName }) {
             group.type === "mediaBreakdown"
               ? !!(data.tables?.pcSummary || data.tables?.moSummary)
               : group.tableKeys.some((k) => data.tables[k] && data.tables[k].length > 0) ||
-                (group.imageKeys || []).some((k) => !!data.images[k]);
+                (group.imageKeys || []).some((k) => toImgArray(data.images[k]).length > 0);
           if (!hasData) return null;
           return <GroupSlide key={group.title} channel={channel} group={group} data={data} hotelName={hotelName} />;
         })}
