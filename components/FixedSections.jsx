@@ -1,6 +1,7 @@
 "use client";
 
 import { PageShell, SummaryBox, Footer } from "./ReportUI";
+import { summarizeChannel } from "../lib/summarize";
 
 export function CoverPage({ hotelName, month, activeChannels }) {
   return (
@@ -15,21 +16,6 @@ export function CoverPage({ hotelName, month, activeChannels }) {
       </div>
     </PageShell>
   );
-}
-
-function summarizeChannel(channel, data) {
-  const lines = [];
-  for (const k of channel.kpis) {
-    if (data.kpis[k.key]) lines.push(`- ${k.label}: ${data.kpis[k.key]}`);
-  }
-  for (const t of channel.tables) {
-    const rows = data.tables[t.key];
-    if (rows && rows.length > 1) lines.push(`- ${t.label}: ${rows.length - 1}건`);
-  }
-  for (const img of channel.images) {
-    if (data.images[img.key]) lines.push(`- ${img.label.replace("첨부 공간", "첨부됨")}`);
-  }
-  return lines.length ? lines.join("\n") : "- 데이터 확인 필요";
 }
 
 export function SummaryPage({ hotelName, activeChannels, channelData }) {

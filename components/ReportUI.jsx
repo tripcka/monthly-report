@@ -28,6 +28,17 @@ export function PageTitle({ kicker, title }) {
   );
 }
 
+/** 슬라이드 안에서 섹션을 구분하는 소제목. 큰 제목(PageTitle)은 채널명으로 고정하고,
+ * 실제 내용 구분은 이 소제목("■ ...")으로 한다. */
+export function SectionTitle({ text }) {
+  if (!text) return null;
+  return (
+    <div className="text-navy font-bold text-base mb-3">
+      <span className="text-orange">■</span> {text}
+    </div>
+  );
+}
+
 export function StatCard({ label, value, sub, accent = "text-orange" }) {
   return (
     <div className="bg-card border border-lightgray rounded-lg p-4 flex-1 min-w-[180px]">
@@ -60,7 +71,7 @@ export function CsvTable({ label, rows }) {
   const body = rows.slice(1);
   return (
     <div className="mb-6">
-      {label ? <div className="text-navy font-bold text-sm mb-2">{label}</div> : null}
+      {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
       <div className="overflow-x-auto border border-lightgray rounded-md">
         <table className="w-full text-xs border-collapse">
           <thead>
@@ -98,7 +109,7 @@ export function SplitCsvTable({ label, rows, splitAt }) {
   const right = dataRows.length > at ? [header, ...dataRows.slice(at)] : null;
   return (
     <div className="mb-6">
-      {label ? <div className="text-navy font-bold text-sm mb-2">{label}</div> : null}
+      {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
       <div className="flex gap-3">
         <div className="flex-1">
           <CsvTable rows={left} />
@@ -118,11 +129,16 @@ export function AutoTable({ label, table, rows }) {
   if (table.layout === "split") return <SplitCsvTable label={label} rows={rows} splitAt={table.splitAt} />;
   return <CsvTable label={label} rows={rows} />;
 }
-export function ImageSlot({ label, src }) {
+export function ImageSlot({ label, src, showHeading = true }) {
   const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];
   if (srcs.length > 0) {
     return (
       <div className="mb-6">
+        {showHeading ? (
+          <div className="text-navy font-bold text-sm mb-2">
+            <span className="text-orange">■</span> {label}
+          </div>
+        ) : null}
         <div className="grid grid-cols-3 gap-3">
           {srcs.map((s, i) => (
             <img
