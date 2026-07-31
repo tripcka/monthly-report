@@ -73,7 +73,7 @@ export async function GET(request) {
     };
 
     const postsInput = mediaWithInsights
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       .map((m) => ({
         date: toKstMD(m.timestamp),
         topic: "-", // 담당자가 수동으로 분류해서 채우던 항목 (API로 대체 불가)

@@ -32,6 +32,9 @@ function GroupSlide({ channel, group, data, hotelName }) {
   }
 
   const tablesInGroup = group.tableKeys.map((k) => channel.tables.find((t) => t.key === k)).filter(Boolean);
+  const imagesInGroup = (group.imageKeys || [])
+    .map((k) => channel.images.find((i) => i.key === k))
+    .filter(Boolean);
   return (
     <PageShell>
       <PageTitle kicker={channel.kicker} title={group.title} />
@@ -40,6 +43,9 @@ function GroupSlide({ channel, group, data, hotelName }) {
         if (!rows || rows.length === 0) return null;
         return <AutoTable key={t.key} label={t.label} table={t} rows={rows} />;
       })}
+      {imagesInGroup.map((img) => (
+        <ImageSlot key={img.key} label={img.label} src={data.images[img.key]} />
+      ))}
       <Footer hotelName={hotelName} />
     </PageShell>
   );
@@ -78,7 +84,8 @@ export default function ChannelReportSection({ channel, data, hotelName }) {
           const hasData =
             group.type === "mediaBreakdown"
               ? !!(data.tables?.pcSummary || data.tables?.moSummary)
-              : group.tableKeys.some((k) => data.tables[k] && data.tables[k].length > 0);
+              : group.tableKeys.some((k) => data.tables[k] && data.tables[k].length > 0) ||
+                (group.imageKeys || []).some((k) => !!data.images[k]);
           if (!hasData) return null;
           return <GroupSlide key={group.title} channel={channel} group={group} data={data} hotelName={hotelName} />;
         })}
