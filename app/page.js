@@ -181,7 +181,7 @@ export default function Page() {
       {/* Right: live report preview */}
       <div className="flex-1 h-screen overflow-y-auto bg-[#E9E5DE] py-8">
         <div className="space-y-8 flex flex-col items-center">
-          <CoverPage hotelName={hotelName} month={month} activeChannels={activeChannels} />
+          <CoverPage hotelName={hotelName} month={month} />
           <SummaryPage hotelName={hotelName} activeChannels={activeChannels} channelData={channelData} />
           {activeChannels.map((ch) => (
             <ChannelReportSection key={ch.id} channel={ch} data={channelData[ch.id]} hotelName={hotelName} />
