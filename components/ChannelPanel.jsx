@@ -17,6 +17,7 @@ import {
 } from "../lib/blogInsightFiles";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
+const EMPTY_CAFE_POST = { cafeName: "", url: "" };
 
 function reportMonthToInput(value = "") {
   const match = String(value).match(/(\d{4})\D+(\d{1,2})/);
@@ -34,6 +35,8 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   const [blogInsightStatus, setBlogInsightStatus] = useState(null);
   const [sheetUrl, setSheetUrl] = useState("");
   const [sheetStatus, setSheetStatus] = useState(null);
+  const [cafePosts, setCafePosts] = useState([{ ...EMPTY_CAFE_POST }]);
+  const [cafeStatus, setCafeStatus] = useState(null);
 
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
@@ -183,6 +186,50 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
       setSheetStatus({ type: "done", message: `체험단 ${rowCount}건을 반영했습니다.` });
     } catch (error) {
       setSheetStatus({ type: "error", message: error.message || String(error) });
+    }
+  }
+
+  function patchCafePost(index, patch) {
+    setCafePosts((current) => current.map((post, i) => (i === index ? { ...post, ...patch } : post)));
+  }
+
+  async function handleCafePostsFetch() {
+    const entries = cafePosts.filter((p) => p.url.trim());
+    if (entries.length === 0) {
+      setCafeStatus({ type: "error", message: "카페 글 URL을 1개 이상 입력해 주세요." });
+      return;
+    }
+    setCafeStatus({ type: "loading", message: `${entries.length}건 제목 가져오는 중...` });
+    const results = [];
+    const errors = [];
+    for (const entry of entries) {
+      try {
+        const response = await fetch("/api/link-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: entry.url.trim() }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "제목을 가져오지 못했습니다.");
+        results.push([entry.cafeName.trim() || "-", result.title, entry.url.trim()]);
+      } catch (error) {
+        errors.push(`${entry.cafeName || entry.url}: ${error.message || error}`);
+      }
+    }
+    if (results.length > 0) {
+      const table = [["카페명", "제목", "포스팅 URL"], ...results];
+      onChange({ ...data, tables: { ...data.tables, posts: table } });
+    }
+    if (errors.length > 0) {
+      setCafeStatus({
+        type: results.length > 0 ? "done" : "error",
+        message: [
+          results.length > 0 ? `${results.length}건 반영 완료. 아래는 실패한 항목:` : "전부 실패했습니다:",
+          ...errors,
+        ].join("\n"),
+      });
+    } else {
+      setCafeStatus({ type: "done", message: `${results.length}건 반영 완료.` });
     }
   }
 
@@ -362,6 +409,64 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
             {sheetStatus?.type === "done" && <div className="text-xs text-green-700">✓ {sheetStatus.message}</div>}
             {sheetStatus?.type === "error" && (
               <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {sheetStatus.message}</div>
+            )}
+          </div>
+        )}
+
+        {channel.id === "cafeViral" && (
+          <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-graytxt">카페 글 링크로 표 자동 생성</div>
+              {cafePosts.length < 10 && (
+                <button
+                  onClick={() => setCafePosts((current) => [...current, { ...EMPTY_CAFE_POST }])}
+                  className="text-[11px] font-bold text-orange"
+                >
+                  + 글 추가
+                </button>
+              )}
+            </div>
+            {cafePosts.map((post, index) => (
+              <div key={index} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-navy">글 {index + 1}</span>
+                  {cafePosts.length > 1 && (
+                    <button
+                      onClick={() => setCafePosts((current) => current.filter((_, i) => i !== index))}
+                      className="text-[10px] text-red-600"
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+                <input
+                  placeholder="카페명 (예: 다이렉트 결혼준비 (상견례))"
+                  value={post.cafeName}
+                  onChange={(e) => patchCafePost(index, { cafeName: e.target.value })}
+                  className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                />
+                <input
+                  type="url"
+                  placeholder="포스팅 URL"
+                  value={post.url}
+                  onChange={(e) => patchCafePost(index, { url: e.target.value })}
+                  className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                />
+              </div>
+            ))}
+            <button
+              onClick={handleCafePostsFetch}
+              disabled={cafeStatus?.type === "loading"}
+              className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm disabled:opacity-50"
+            >
+              {cafeStatus?.type === "loading" ? cafeStatus.message : "제목 가져와서 표 생성"}
+            </button>
+            <div className="text-[10px] text-muted">
+              URL의 제목만 자동으로 가져옵니다. 공개된 글만 가능하며(비공개/로그인 필요 글은 실패), 캡쳐 이미지는 아래 이미지 첨부에서 별도로 올려주세요.
+            </div>
+            {cafeStatus?.type === "done" && <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {cafeStatus.message}</div>}
+            {cafeStatus?.type === "error" && (
+              <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {cafeStatus.message}</div>
             )}
           </div>
         )}
