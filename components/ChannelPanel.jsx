@@ -32,6 +32,8 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
   const [blogStatus, setBlogStatus] = useState(null);
   const [blogInsightStatus, setBlogInsightStatus] = useState(null);
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetStatus, setSheetStatus] = useState(null);
 
   function setKpi(key, value) {
     onChange({ ...data, kpis: { ...data.kpis, [key]: value } });
@@ -155,6 +157,32 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
       });
     } catch (error) {
       setBlogStatus({ type: "error", message: error.message || String(error) });
+    }
+  }
+
+  async function handleLoadBlogSheet() {
+    if (!sheetUrl.trim()) {
+      setSheetStatus({ type: "error", message: "구글 시트 URL을 입력해 주세요." });
+      return;
+    }
+    setSheetStatus({ type: "loading", message: "구글 시트에서 불러오는 중..." });
+    try {
+      const response = await fetch("/api/sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheetUrl: sheetUrl.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "구글 시트를 불러오지 못했습니다.");
+      onChange({
+        ...data,
+        kpis: { ...data.kpis, ...result.kpis },
+        tables: { ...data.tables, ...result.tables },
+      });
+      const rowCount = (result.tables?.roster?.length || 1) - 1;
+      setSheetStatus({ type: "done", message: `체험단 ${rowCount}건을 반영했습니다.` });
+    } catch (error) {
+      setSheetStatus({ type: "error", message: error.message || String(error) });
     }
   }
 
@@ -308,6 +336,33 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                 <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {igStatus.message}</div>
               )}
             </div>
+          </div>
+        )}
+
+        {channel.id === "blogExperience" && (
+          <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5] space-y-3">
+            <div className="text-xs font-bold text-graytxt">구글 시트로 체험단 리스트 자동 불러오기</div>
+            <input
+              type="url"
+              placeholder="구글 시트 URL (링크가 있는 모든 사용자로 공유되어 있어야 함)"
+              value={sheetUrl}
+              onChange={(e) => setSheetUrl(e.target.value)}
+              className="border border-lightgray rounded-md px-3 py-2 text-xs w-full bg-white"
+            />
+            <button
+              onClick={handleLoadBlogSheet}
+              disabled={sheetStatus?.type === "loading"}
+              className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm disabled:opacity-50"
+            >
+              {sheetStatus?.type === "loading" ? sheetStatus.message : "구글 시트 불러오기"}
+            </button>
+            <div className="text-[10px] text-muted">
+              시트 공유 설정에서 "링크가 있는 모든 사용자 - 뷰어" 이상으로 열려 있어야 불러올 수 있습니다. 헤더 행 위치는 자동으로 찾습니다 (성함/이름 열 기준).
+            </div>
+            {sheetStatus?.type === "done" && <div className="text-xs text-green-700">✓ {sheetStatus.message}</div>}
+            {sheetStatus?.type === "error" && (
+              <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {sheetStatus.message}</div>
+            )}
           </div>
         )}
 
