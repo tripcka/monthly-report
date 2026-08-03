@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "iconv-lite": "^0.7.3",
     "next": "14.2.35",
     "papaparse": "5.4.1",
     "pptxgenjs": "3.12.0",
