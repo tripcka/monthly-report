@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
 import { parseInstagramInsightText, parseInstagramPostInsightText } from "../lib/parsers/instagramPaste";
@@ -44,21 +45,36 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
     onChange({ ...data, images: { ...data.images, [key]: existing.filter((_, i) => i !== index) } });
   }
 
-  function handleCsv(upload, file) {
-    Papa.parse(file, {
+  function applyUploadedRows(upload, inputRows) {
+    const rows = (inputRows || []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
+    const { kpis, tables } = runParser(upload, rows);
+    const nextTables = { ...data.tables, ...tables };
+    if (channel.id === "brandBlog" && upload.targetTable === "posts" && nextTables.posts) {
+      nextTables.posts = sortBlogPostsOldestFirst(nextTables.posts);
+    }
+    onChange({
+      ...data,
+      kpis: { ...data.kpis, ...kpis },
+      tables: nextTables,
+    });
+  }
+
+  async function handleCsv(upload, file, decodeText) {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (extension === "xlsx" || extension === "xls") {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "", raw: false });
+      applyUploadedRows(upload, rows);
+      return;
+    }
+
+    const text = decodeText(await file.arrayBuffer());
+    // 파일 확장자와 실제 구분자가 달라도 Papa Parse가 콤마/탭/세미콜론을 자동 인식한다.
+    Papa.parse(new Blob([text], { type: "text/plain" }), {
       skipEmptyLines: true,
       complete: (result) => {
-        const rows = (result.data || []).filter((r) => r.some((c) => String(c).trim() !== ""));
-        const { kpis, tables } = runParser(upload, rows);
-        const nextTables = { ...data.tables, ...tables };
-        if (channel.id === "brandBlog" && upload.targetTable === "posts" && nextTables.posts) {
-          nextTables.posts = sortBlogPostsOldestFirst(nextTables.posts);
-        }
-        onChange({
-          ...data,
-          kpis: { ...data.kpis, ...kpis },
-          tables: nextTables,
-        });
+        applyUploadedRows(upload, result.data);
       },
     });
   }
@@ -354,7 +370,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
         {channel.uploads && channel.uploads.length > 0 && (
           <div>
             <div className="text-xs font-bold text-graytxt mb-2">
-              파일 업로드 (자동으로 아래 항목이 채워집니다)
+              파일 업로드 · CSV/엑셀 (자동으로 아래 항목이 채워집니다)
             </div>
             <div className="space-y-2">
               {channel.uploads.map((u) => (

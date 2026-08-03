@@ -24,22 +24,16 @@ export function CsvUploader({ label, onFile, hasData }) {
   function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = detectEncodingAndDecode(reader.result);
-      // 실제 파일이 파일명은 .csv지만 탭으로 구분된 경우가 있어(카카오모먼트 다운로드 등),
-      // Blob으로 감싸서 넘기면 Papa.parse가 구분자(콤마/탭/세미콜론)를 자동으로 인식한다.
-      onFile(new Blob([text], { type: "text/plain" }));
-    };
-    reader.readAsArrayBuffer(file);
+    onFile(file, detectEncodingAndDecode);
+    e.target.value = "";
   }
   return (
     <label className="flex items-center justify-between gap-3 border border-lightgray rounded-md px-3 py-2 cursor-pointer hover:bg-card text-sm">
       <span className="text-graytxt">{label}</span>
       <span className={`text-xs font-bold ${hasData ? "text-orange" : "text-muted"}`}>
-        {hasData ? "업로드됨 ✓" : "CSV 선택"}
+        {hasData ? "업로드됨 ✓" : "CSV·엑셀 선택"}
       </span>
-      <input type="file" accept=".csv,.txt,.tsv" className="hidden" onChange={handleFile} />
+      <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" className="hidden" onChange={handleFile} />
     </label>
   );
 }
