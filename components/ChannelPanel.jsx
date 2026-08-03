@@ -17,7 +17,7 @@ import {
 } from "../lib/blogInsightFiles";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
-const EMPTY_CAFE_POST = { cafeName: "", url: "" };
+const EMPTY_CAFE_POST = { cafeName: "", title: "", url: "" };
 
 function reportMonthToInput(value = "") {
   const match = String(value).match(/(\d{4})\D+(\d{1,2})/);
@@ -199,33 +199,38 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
       setCafeStatus({ type: "error", message: "카페 글 URL을 1개 이상 입력해 주세요." });
       return;
     }
-    setCafeStatus({ type: "loading", message: `${entries.length}건 제목 가져오는 중...` });
+    setCafeStatus({ type: "loading", message: `${entries.length}건 처리 중...` });
     const results = [];
-    const errors = [];
+    const autoFetchFailed = [];
     for (const entry of entries) {
-      try {
-        const response = await fetch("/api/link-preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: entry.url.trim() }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "제목을 가져오지 못했습니다.");
-        results.push([entry.cafeName.trim() || "-", result.title, entry.url.trim()]);
-      } catch (error) {
-        errors.push(`${entry.cafeName || entry.url}: ${error.message || error}`);
+      let title = entry.title.trim();
+      if (!title) {
+        // 제목을 직접 안 적었으면 자동으로 시도는 해보되, 실패해도(네이버 카페는 대부분 실패) 그냥 "-"로 둔다
+        try {
+          const response = await fetch("/api/link-preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: entry.url.trim() }),
+          });
+          const result = await response.json();
+          if (response.ok && result.title) title = result.title;
+        } catch {
+          // 무시 — 아래에서 실패 목록에 추가
+        }
+        if (!title) autoFetchFailed.push(entry.cafeName || entry.url);
       }
+      results.push([entry.cafeName.trim() || "-", title || "-", entry.url.trim()]);
     }
-    if (results.length > 0) {
-      const table = [["카페명", "제목", "포스팅 URL"], ...results];
-      onChange({ ...data, tables: { ...data.tables, posts: table } });
-    }
-    if (errors.length > 0) {
+    const table = [["카페명", "제목", "포스팅 URL"], ...results];
+    onChange({ ...data, tables: { ...data.tables, posts: table } });
+
+    if (autoFetchFailed.length > 0) {
       setCafeStatus({
-        type: results.length > 0 ? "done" : "error",
+        type: "error",
         message: [
-          results.length > 0 ? `${results.length}건 반영 완료. 아래는 실패한 항목:` : "전부 실패했습니다:",
-          ...errors,
+          `${results.length}건 표에 반영했습니다.`,
+          `다만 아래 항목은 제목 자동 가져오기가 안 돼서 "-"로 비어있어요 (네이버 카페는 로그인 없이 접근하면 글 제목이 안 나오는 경우가 많습니다). 제목을 직접 입력해 주세요:`,
+          ...autoFetchFailed.map((n) => `- ${n}`),
         ].join("\n"),
       });
     } else {
@@ -416,7 +421,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
         {channel.id === "cafeViral" && (
           <div className="border border-lightgray rounded-md p-3 bg-[#FAF8F5] space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-graytxt">카페 글 링크로 표 자동 생성</div>
+              <div className="text-xs font-bold text-graytxt">포스팅 리스트 입력</div>
               {cafePosts.length < 10 && (
                 <button
                   onClick={() => setCafePosts((current) => [...current, { ...EMPTY_CAFE_POST }])}
@@ -446,6 +451,12 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                   className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
                 />
                 <input
+                  placeholder="글 제목 (직접 입력 — 비워두면 자동으로 시도, 네이버 카페는 대부분 실패함)"
+                  value={post.title}
+                  onChange={(e) => patchCafePost(index, { title: e.target.value })}
+                  className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                />
+                <input
                   type="url"
                   placeholder="포스팅 URL"
                   value={post.url}
@@ -459,10 +470,10 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
               disabled={cafeStatus?.type === "loading"}
               className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm disabled:opacity-50"
             >
-              {cafeStatus?.type === "loading" ? cafeStatus.message : "제목 가져와서 표 생성"}
+              {cafeStatus?.type === "loading" ? cafeStatus.message : "표에 반영"}
             </button>
             <div className="text-[10px] text-muted">
-              URL의 제목만 자동으로 가져옵니다. 공개된 글만 가능하며(비공개/로그인 필요 글은 실패), 캡쳐 이미지는 아래 이미지 첨부에서 별도로 올려주세요.
+              제목은 직접 입력하는 걸 권장합니다. 네이버 카페는 로그인 없이 접근하면 글 제목 대신 카페 소개 페이지 제목이 나와서, 자동 가져오기가 대부분 실패합니다. 캡쳐 이미지는 아래 이미지 첨부에서 별도로 올려주세요.
             </div>
             {cafeStatus?.type === "done" && <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {cafeStatus.message}</div>}
             {cafeStatus?.type === "error" && (
