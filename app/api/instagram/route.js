@@ -77,7 +77,7 @@ export async function GET(request) {
       .map((m) => ({
         date: toKstMD(m.timestamp),
         topic: "-", // 담당자가 수동으로 분류해서 채우던 항목 (API로 대체 불가)
-        isAd: "-", // 광고 진행 여부는 Marketing API 권한이 없어 자동 판별 불가, 수동 입력 필요
+        isAd: "N", // 광고 진행 여부는 Marketing API 권한이 없어 자동 판별 불가, 수동 입력 필요
         views: m._insights.views === "-" ? "-" : fmt(m._insights.views),
         reach: m._insights.reach === "-" ? "-" : fmt(m._insights.reach),
         likes: fmt(Number(m.like_count) || 0),

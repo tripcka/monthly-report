@@ -16,7 +16,7 @@ import {
   sortBlogPostsOldestFirst,
 } from "../lib/blogInsightFiles";
 
-const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "아니오", adCost: "", text: "" };
+const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
 
 function reportMonthToInput(value = "") {
   const match = String(value).match(/(\d{4})\D+(\d{1,2})/);
@@ -274,8 +274,8 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                       onChange={(e) => patchPostInsight(index, { isAd: e.target.value })}
                       className="border border-lightgray rounded px-2 py-1.5 text-xs bg-white"
                     >
-                      <option>아니오</option>
-                      <option>예</option>
+                      <option value="N">N</option>
+                      <option value="Y">Y</option>
                     </select>
                     <input
                       placeholder="광고비 (선택)"

@@ -41,7 +41,7 @@ export function SectionTitle({ text }) {
 
 export function StatCard({ label, value, sub, accent = "text-orange" }) {
   return (
-    <div className="bg-card border border-lightgray rounded-lg px-4 pt-3 pb-2.5 flex-1 min-w-[180px]">
+    <div className="bg-card border border-lightgray rounded-lg px-4 pt-3 pb-2.5 min-w-0">
       <div className="text-graytxt text-xs font-bold mb-1.5">{label}</div>
       <div className={`text-2xl font-bold ${sub ? "mb-1.5" : ""} ${accent}`}>{value || "-"}</div>
       {sub ? <div className="text-graytxt text-[11px] leading-snug">{sub}</div> : null}
@@ -50,7 +50,14 @@ export function StatCard({ label, value, sub, accent = "text-orange" }) {
 }
 
 export function StatCardRow({ children }) {
-  return <div className="flex gap-3 flex-wrap mb-4">{children}</div>;
+  return (
+    <div
+      className="grid gap-3 mb-4"
+      style={{ gridTemplateColumns: `repeat(${Math.max(1, Array.isArray(children) ? children.length : 1)}, minmax(0, 1fr))` }}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function SummaryBox({ title, body }) {
@@ -143,13 +150,13 @@ export function ImageSlot({ label, src, showHeading = true }) {
             <span className="text-orange">■</span> {label}
           </div>
         ) : null}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           {srcs.map((s, i) => (
             <img
               key={i}
               src={s}
               alt={`${label} ${i + 1}`}
-              className="max-h-[220px] w-full object-contain rounded-md border border-lightgray bg-white"
+              className="block max-h-[220px] max-w-[32%] w-auto h-auto object-contain rounded-md border border-lightgray bg-white p-1"
             />
           ))}
         </div>

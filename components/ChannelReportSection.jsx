@@ -3,6 +3,7 @@
 import { PageShell, PageTitle, SectionTitle, StatCard, StatCardRow, AutoTable, CsvTable, ImageSlot, Footer } from "./ReportUI";
 import { buildNaverMediaBreakdownTable } from "../lib/channels";
 import { toImgArray } from "../lib/imageUtils";
+import { normalizeInstagramPostsRows } from "../lib/postsTable";
 
 function groupHasData(group, data) {
   if ((group.kpiKeys || []).some((key) => data.kpis?.[key])) return true;
@@ -38,7 +39,8 @@ function GroupContent({ channel, group, data }) {
       {tablesInGroup.map((t) => {
         const sourceRows = data.tables[t.key];
         const rowIndexes = group.tableRows?.[t.key];
-        const rows = rowIndexes ? rowIndexes.map((index) => sourceRows?.[index]).filter(Boolean) : sourceRows;
+        let rows = rowIndexes ? rowIndexes.map((index) => sourceRows?.[index]).filter(Boolean) : sourceRows;
+        if (channel.id === "instagram" && t.key === "posts") rows = normalizeInstagramPostsRows(rows);
         if (!rows || rows.length === 0) return null;
         return <AutoTable key={t.key} label={null} table={t} rows={rows} />;
       })}
