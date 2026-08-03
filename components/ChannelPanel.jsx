@@ -7,7 +7,7 @@ import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
 import { parseInstagramInsightText, parseInstagramPostInsightText } from "../lib/parsers/instagramPaste";
 import { toImgArray } from "../lib/imageUtils";
-import { buildInstagramPostsTable } from "../lib/postsTable";
+import { buildInstagramPostsTable, formatWon } from "../lib/postsTable";
 import {
   BLOG_POST_HEADER,
   ensureBlogPostColumns,
@@ -281,6 +281,9 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                       placeholder="광고비 (선택)"
                       value={post.adCost}
                       onChange={(e) => patchPostInsight(index, { adCost: e.target.value })}
+                      onBlur={(e) => {
+                        if (e.target.value.trim()) patchPostInsight(index, { adCost: formatWon(e.target.value) });
+                      }}
                       className="border border-lightgray rounded px-2 py-1.5 text-xs"
                     />
                   </div>
