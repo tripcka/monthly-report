@@ -436,7 +436,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
                   key={u.key}
                   label={u.label}
                   hasData={Object.keys(data.tables || {}).length > 0 || Object.keys(data.kpis || {}).length > 0}
-                  onFile={(file) => handleCsv(u, file)}
+                  onFile={(file, decodeText) => handleCsv(u, file, decodeText)}
                 />
               ))}
             </div>
