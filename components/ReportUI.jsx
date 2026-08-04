@@ -140,16 +140,11 @@ export function AutoTable({ label, table, rows }) {
   if (table.layout === "split") return <SplitCsvTable label={label} rows={rows} splitAt={table.splitAt} />;
   return <CsvTable label={label} rows={rows} />;
 }
-export function ImageSlot({ label, src, showHeading = true }) {
+export function ImageSlot({ label, src }) {
   const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];
   if (srcs.length > 0) {
     return (
       <div className="mb-6">
-        {showHeading ? (
-          <div className="text-navy font-bold text-sm mb-2">
-            <span className="text-orange">■</span> {label}
-          </div>
-        ) : null}
         <div className="flex flex-wrap items-start gap-3">
           {srcs.map((s, i) => (
             <img

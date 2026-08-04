@@ -287,7 +287,6 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
     <details className="border border-lightgray rounded-lg mb-3 bg-white open:shadow-sm">
       <summary className="px-4 py-3 cursor-pointer font-bold text-navy flex items-center justify-between">
         <span>
-          <span className="text-orange text-xs tracking-widest mr-2">{channel.kicker}</span>
           {channel.title}
         </span>
       </summary>

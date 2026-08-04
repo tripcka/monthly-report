@@ -30,8 +30,6 @@ function GroupContent({ channel, group, data }) {
 
   const tablesInGroup = (group.tableKeys || []).map((k) => channel.tables.find((t) => t.key === k)).filter(Boolean);
   const imagesInGroup = (group.imageKeys || []).map((k) => channel.images.find((i) => i.key === k)).filter(Boolean);
-  // 그룹의 유일한 내용이 이미지 하나뿐이면, 이미지 자체 라벨은 생략해서 소제목과 중복되지 않게 한다.
-  const soleImageIsOnlyContent = tablesInGroup.length === 0 && imagesInGroup.length === 1;
 
   return (
     <>
@@ -59,7 +57,7 @@ function GroupContent({ channel, group, data }) {
         </>
       )}
       {imagesInGroup.map((img) => (
-        <ImageSlot key={img.key} label={img.label} src={data.images[img.key]} showHeading={!soleImageIsOnlyContent} />
+        <ImageSlot key={img.key} label={img.label} src={data.images[img.key]} />
       ))}
     </>
   );
