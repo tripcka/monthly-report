@@ -9,7 +9,7 @@
 export function PageShell({ dark = false, children }) {
   return (
     <div
-      className={`report-page relative w-[1280px] min-h-[720px] mx-auto p-10 ${
+      className={`report-page relative w-[1280px] h-[720px] overflow-hidden mx-auto p-10 ${
         dark ? "bg-navy text-white" : "bg-white text-graytxt"
       }`}
     >

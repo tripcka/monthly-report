@@ -6,6 +6,7 @@ import ChannelPanel from "../components/ChannelPanel";
 import ChannelReportSection from "../components/ChannelReportSection";
 import { CoverPage, SummaryPage, ClosingPage } from "../components/FixedSections";
 import { exportPptx } from "../lib/pptxExport";
+import { exportPreviewPptx } from "../lib/previewPptxExport";
 import { useDraft } from "../lib/useDraft";
 import { getAccessToken, uploadBlobToDrive, extractFolderId } from "../lib/googleDrive";
 
@@ -38,9 +39,10 @@ const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 export default function Page() {
   const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE, migrateDraft);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState(null); // 'preview' | 'editable' | null
   const [driveStatus, setDriveStatus] = useState(null); // { type: 'saving'|'done'|'error', message }
   const [saveAsGoogleSlides, setSaveAsGoogleSlides] = useState(true);
+  const [drivePptxMode, setDrivePptxMode] = useState("preview");
 
   const { hotelName, month, channelData, driveFolderInput } = state;
   const activeChannels = CHANNELS.filter((ch) => isChannelActive(channelData[ch.id], ch));
@@ -53,12 +55,18 @@ export default function Page() {
     setState((prev) => ({ ...prev, channelData: { ...prev.channelData, [id]: next } }));
   }
 
-  async function handleDownload() {
-    setExporting(true);
+  async function handleDownload(mode) {
+    setExporting(mode);
     try {
-      await exportPptx({ hotelName, month, channels: CHANNELS, channelData });
+      if (mode === "preview") {
+        await exportPreviewPptx({ hotelName, month });
+      } else {
+        await exportPptx({ hotelName, month, channels: CHANNELS, channelData });
+      }
+    } catch (e) {
+      alert(e.message || String(e));
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   }
 
@@ -67,13 +75,9 @@ export default function Page() {
     try {
       const token = await getAccessToken(GOOGLE_CLIENT_ID);
       setDriveStatus({ type: "saving", message: "보고서 생성 중..." });
-      const { blob, fileName } = await exportPptx({
-        hotelName,
-        month,
-        channels: CHANNELS,
-        channelData,
-        outputType: "blob",
-      });
+      const { blob, fileName } = drivePptxMode === "preview"
+        ? await exportPreviewPptx({ hotelName, month, outputType: "blob" })
+        : await exportPptx({ hotelName, month, channels: CHANNELS, channelData, outputType: "blob" });
       setDriveStatus({ type: "saving", message: "Google Drive에 업로드 중..." });
       const folderId = extractFolderId(driveFolderInput);
       const result = await uploadBlobToDrive({ accessToken: token, blob, fileName, folderId, asGoogleSlides: saveAsGoogleSlides });
@@ -123,13 +127,25 @@ export default function Page() {
           임시저장 지우고 새로 시작하기
         </button>
 
-        <button
-          onClick={handleDownload}
-          disabled={exporting}
-          className="w-full bg-orange text-white font-bold rounded-md py-2.5 mb-3 disabled:opacity-50"
-        >
-          {exporting ? "생성 중..." : "PPTX 다운로드"}
-        </button>
+        <div className="space-y-2 mb-3">
+          <button
+            onClick={() => handleDownload("preview")}
+            disabled={!!exporting}
+            className="w-full bg-orange text-white font-bold rounded-md py-2.5 disabled:opacity-50"
+          >
+            {exporting === "preview" ? "미리보기 캡처 중..." : "미리보기 그대로 PPTX"}
+          </button>
+          <button
+            onClick={() => handleDownload("editable")}
+            disabled={!!exporting}
+            className="w-full bg-white text-navy border border-navy font-bold rounded-md py-2.5 disabled:opacity-50"
+          >
+            {exporting === "editable" ? "편집형 생성 중..." : "편집 가능한 PPTX"}
+          </button>
+          <div className="text-[10px] text-muted leading-relaxed">
+            미리보기 그대로 PPTX는 화면과 동일하지만 슬라이드 안의 글자·표를 개별 편집할 수 없습니다.
+          </div>
+        </div>
 
         <div className="border border-lightgray rounded-md p-3 mb-5 bg-white">
           <div className="text-xs font-bold text-graytxt mb-2">Google Drive에 저장</div>
@@ -139,6 +155,26 @@ export default function Page() {
             onChange={(e) => patch({ driveFolderInput: e.target.value })}
             className="border border-lightgray rounded-md px-3 py-2 text-xs w-full mb-2"
           />
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-graytxt cursor-pointer">
+              <input
+                type="radio"
+                name="drivePptxMode"
+                checked={drivePptxMode === "preview"}
+                onChange={() => setDrivePptxMode("preview")}
+              />
+              미리보기 그대로
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-graytxt cursor-pointer">
+              <input
+                type="radio"
+                name="drivePptxMode"
+                checked={drivePptxMode === "editable"}
+                onChange={() => setDrivePptxMode("editable")}
+              />
+              편집 가능
+            </label>
+          </div>
           <label className="flex items-center gap-2 text-xs text-graytxt mb-2 cursor-pointer">
             <input
               type="checkbox"
@@ -193,7 +229,7 @@ export default function Page() {
       </div>
 
       {/* Right: live report preview */}
-      <div className="flex-1 h-screen overflow-y-auto bg-[#E9E5DE] py-8">
+      <div data-report-preview className="flex-1 h-screen overflow-y-auto bg-[#E9E5DE] py-8">
         <div className="space-y-8 flex flex-col items-center">
           <CoverPage hotelName={hotelName} month={month} />
           <SummaryPage hotelName={hotelName} activeChannels={activeChannels} channelData={channelData} />
