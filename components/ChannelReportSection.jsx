@@ -1,33 +1,19 @@
 "use client";
 
 import { PageShell, PageTitle, SectionTitle, StatCard, StatCardRow, AutoTable, CsvTable, ImageSlot, Footer } from "./ReportUI";
-import { buildNaverMediaBreakdownTable } from "../lib/channels";
 import { toImgArray } from "../lib/imageUtils";
 import { normalizeInstagramPostsRows } from "../lib/postsTable";
 
 function groupHasData(group, data) {
   if ((group.kpiKeys || []).some((key) => data.kpis?.[key])) return true;
   if ((group.kpiDetail?.keys || []).some((key) => data.kpis?.[key])) return true;
-  if (group.type === "mediaBreakdown") {
-    return !!(data.tables?.pcSummary?.length > 0 || data.tables?.moSummary?.length > 0);
-  }
   const hasTable = (group.tableKeys || []).some((k) => data.tables[k] && data.tables[k].length > 0);
   const hasImg = (group.imageKeys || []).some((k) => toImgArray(data.images[k]).length > 0);
   return hasTable || hasImg;
 }
 
-/** 그룹 하나(표/매체비중/이미지)의 내용을 소제목("■ ...")과 함께 렌더링 */
+/** 그룹 하나(표/이미지)의 내용을 소제목("■ ...")과 함께 렌더링 */
 function GroupContent({ channel, group, data }) {
-  if (group.type === "mediaBreakdown") {
-    const { mediaTable } = buildNaverMediaBreakdownTable(data);
-    return (
-      <>
-        <SectionTitle text={group.title} />
-        <CsvTable rows={mediaTable} />
-      </>
-    );
-  }
-
   const tablesInGroup = (group.tableKeys || []).map((k) => channel.tables.find((t) => t.key === k)).filter(Boolean);
   const imagesInGroup = (group.imageKeys || []).map((k) => channel.images.find((i) => i.key === k)).filter(Boolean);
 
