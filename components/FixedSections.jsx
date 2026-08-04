@@ -9,7 +9,7 @@ export function CoverPage({ hotelName, month }) {
     <PageShell dark>
       <img src={LOGO_WHITE} alt="Tripicka" className="mt-6 h-8" />
       <div className="mt-40 text-white font-bold text-5xl">{hotelName || "[호텔명]"}</div>
-      <div className="mt-4 text-gray-300 text-2xl">월별 마케팅 운영 보고서</div>
+      <div className="mt-4 text-gray-300 text-5xl">월별 마케팅 운영 보고서</div>
       <div className="mt-6 text-orange font-bold text-base">{month || "[YYYY년 M월]"}</div>
     </PageShell>
   );
