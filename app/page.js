@@ -40,6 +40,7 @@ export default function Page() {
   const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE, migrateDraft);
   const [exporting, setExporting] = useState(false);
   const [driveStatus, setDriveStatus] = useState(null); // { type: 'saving'|'done'|'error', message }
+  const [saveAsGoogleSlides, setSaveAsGoogleSlides] = useState(true);
 
   const { hotelName, month, channelData, driveFolderInput } = state;
   const activeChannels = CHANNELS.filter((ch) => isChannelActive(channelData[ch.id], ch));
@@ -75,7 +76,7 @@ export default function Page() {
       });
       setDriveStatus({ type: "saving", message: "Google Drive에 업로드 중..." });
       const folderId = extractFolderId(driveFolderInput);
-      const result = await uploadBlobToDrive({ accessToken: token, blob, fileName, folderId });
+      const result = await uploadBlobToDrive({ accessToken: token, blob, fileName, folderId, asGoogleSlides: saveAsGoogleSlides });
       setDriveStatus({
         type: "done",
         message: "저장 완료!",
@@ -138,6 +139,19 @@ export default function Page() {
             onChange={(e) => patch({ driveFolderInput: e.target.value })}
             className="border border-lightgray rounded-md px-3 py-2 text-xs w-full mb-2"
           />
+          <label className="flex items-center gap-2 text-xs text-graytxt mb-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={saveAsGoogleSlides}
+              onChange={(e) => setSaveAsGoogleSlides(e.target.checked)}
+            />
+            구글 슬라이드로 변환해서 저장 (체크 해제 시 PPTX 파일 그대로 저장)
+          </label>
+          {saveAsGoogleSlides && (
+            <div className="text-[10px] text-muted mb-2">
+              변환 과정에서 표/폰트 간격이 원본 PPTX와 미세하게 달라질 수 있습니다.
+            </div>
+          )}
           <button
             onClick={handleSaveToDrive}
             disabled={driveStatus?.type === "saving"}
