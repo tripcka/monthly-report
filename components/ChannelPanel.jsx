@@ -23,7 +23,20 @@ import {
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
 const EMPTY_AD_INSIGHT = { name: "", text: "" };
+const ADS_PER_FEED = 3;
+const MAX_AD_FEEDS = 6;
 const EMPTY_CAFE_POST = { cafeName: "", title: "", url: "" };
+
+function makeAdFeed(feedIndex) {
+  return {
+    name: `피드 ${feedIndex + 1}`,
+    date: "",
+    ads: Array.from({ length: ADS_PER_FEED }, (_, adIndex) => ({
+      ...EMPTY_AD_INSIGHT,
+      name: `광고 ${adIndex + 1}`,
+    })),
+  };
+}
 
 function reportMonthToInput(value = "") {
   const match = String(value).match(/(\d{4})\D+(\d{1,2})/);
@@ -35,11 +48,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   const [igStatus, setIgStatus] = useState(null);
   const [igPasteText, setIgPasteText] = useState("");
   const [postInsights, setPostInsights] = useState([{ ...EMPTY_POST_INSIGHT }]);
-  const [adInsights, setAdInsights] = useState([
-    { name: "광고 1", text: "" },
-    { name: "광고 2", text: "" },
-    { name: "광고 3", text: "" },
-  ]);
+  const [adInsightFeeds, setAdInsightFeeds] = useState([makeAdFeed(0)]);
   const [blogUrl, setBlogUrl] = useState("");
   const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
   const [blogStatus, setBlogStatus] = useState(null);
@@ -126,18 +135,56 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
     setIgStatus({ type: "done", message: `게시물 인사이트 ${posts.length}건 반영 완료` });
   }
 
-  function patchAdInsight(index, patch) {
-    setAdInsights((current) => current.map((ad, i) => (i === index ? { ...ad, ...patch } : ad)));
+  function patchAdFeed(feedIndex, patch) {
+    setAdInsightFeeds((current) => current.map((feed, i) => (i === feedIndex ? { ...feed, ...patch } : feed)));
+  }
+
+  function patchAdInsight(feedIndex, adIndex, patch) {
+    setAdInsightFeeds((current) => current.map((feed, i) => (
+      i === feedIndex
+        ? { ...feed, ads: feed.ads.map((ad, j) => (j === adIndex ? { ...ad, ...patch } : ad)) }
+        : feed
+    )));
+  }
+
+  function addAdFeed() {
+    setAdInsightFeeds((current) => (
+      current.length >= MAX_AD_FEEDS ? current : [...current, makeAdFeed(current.length)]
+    ));
+  }
+
+  function removeAdFeed(feedIndex) {
+    setAdInsightFeeds((current) => current.filter((_, i) => i !== feedIndex));
   }
 
   function handleAdInsightsPaste() {
-    const ads = adInsights.map((ad) => parseInstagramAdInsightText(ad.text, ad)).filter(Boolean);
-    if (ads.length === 0) {
+    const parsedFeeds = adInsightFeeds
+      .map((feed) => ({
+        name: feed.name.trim(),
+        ads: feed.ads.map((ad) => parseInstagramAdInsightText(ad.text, ad)).filter(Boolean),
+      }))
+      .filter((feed) => feed.ads.length > 0);
+    const adCount = parsedFeeds.reduce((sum, feed) => sum + feed.ads.length, 0);
+    if (adCount === 0) {
       setIgStatus({ type: "error", message: "인식할 수 있는 광고 인사이트가 없습니다." });
       return;
     }
-    onChange({ ...data, tables: { ...data.tables, adInsights: buildInstagramAdInsightsTable(ads) } });
-    setIgStatus({ type: "done", message: `광고 인사이트 ${ads.length}건 반영 완료 (타겟·주요 위치 포함)` });
+    const nextTables = { ...data.tables };
+    for (let index = 0; index < MAX_AD_FEEDS; index += 1) delete nextTables[`adInsights${index + 1}`];
+    parsedFeeds.forEach((feed, index) => {
+      const rows = buildInstagramAdInsightsTable(feed.ads, {
+        feedName: feed.name || `피드 ${index + 1}`,
+        date: feed.date,
+      });
+      nextTables[`adInsights${index + 1}`] = rows;
+      // 기존 버전의 adInsights 키는 첫 피드와 계속 호환한다.
+      if (index === 0) nextTables.adInsights = rows;
+    });
+    onChange({ ...data, tables: nextTables });
+    setIgStatus({
+      type: "done",
+      message: `피드 ${parsedFeeds.length}개 · 광고 인사이트 ${adCount}건 반영 완료 (타겟·주요 위치 포함)`,
+    });
   }
 
   function setInstagramDetail(tableKey, rowIndex, colIndex, value) {
@@ -407,27 +454,64 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
               </button>
               <div className="border-t border-lightgray pt-3 space-y-3">
                 <div className="text-xs font-bold text-graytxt">
-                  피드 광고 인사이트 붙여넣기 (광고 3개)
+                  피드 광고 인사이트 붙여넣기 (피드당 광고 3개 · 최대 6개 피드)
                 </div>
                 <div className="text-[11px] text-graytxt">
                   각 광고의 광고 개요 원문을 붙여넣으면 타겟과 주요 노출 위치까지 자동으로 표시됩니다.
                 </div>
-                {adInsights.map((ad, index) => (
-                  <div key={index} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
-                    <input
-                      placeholder={`광고 ${index + 1} 이름`}
-                      value={ad.name}
-                      onChange={(e) => patchAdInsight(index, { name: e.target.value })}
-                      className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
-                    />
-                    <textarea
-                      value={ad.text}
-                      onChange={(e) => patchAdInsight(index, { text: e.target.value })}
-                      placeholder={`광고 ${index + 1}의 '광고 개요' 원문을 붙여넣으세요.`}
-                      className="border border-lightgray rounded px-2 py-1.5 text-xs w-full h-28 resize-y"
-                    />
+                {adInsightFeeds.map((feed, feedIndex) => (
+                  <div key={feedIndex} className="border border-lightgray rounded-md p-2 bg-[#FAF8F5] space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="date"
+                        aria-label={`피드 ${feedIndex + 1} 광고 집행일`}
+                        value={feed.date || ""}
+                        onChange={(e) => patchAdFeed(feedIndex, { date: e.target.value })}
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs w-36"
+                      />
+                      <input
+                        placeholder={`피드 ${feedIndex + 1} 이름`}
+                        value={feed.name}
+                        onChange={(e) => patchAdFeed(feedIndex, { name: e.target.value })}
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs flex-1"
+                      />
+                      {adInsightFeeds.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeAdFeed(feedIndex)}
+                          className="text-[11px] text-red-600 underline shrink-0"
+                        >
+                          피드 삭제
+                        </button>
+                      )}
+                    </div>
+                    {feed.ads.map((ad, adIndex) => (
+                      <div key={adIndex} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
+                        <input
+                          placeholder={`광고 ${adIndex + 1} 이름`}
+                          value={ad.name}
+                          onChange={(e) => patchAdInsight(feedIndex, adIndex, { name: e.target.value })}
+                          className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                        />
+                        <textarea
+                          value={ad.text}
+                          onChange={(e) => patchAdInsight(feedIndex, adIndex, { text: e.target.value })}
+                          placeholder={`${feed.name || `피드 ${feedIndex + 1}`} 광고 ${adIndex + 1}의 '광고 개요' 원문을 붙여넣으세요.`}
+                          className="border border-lightgray rounded px-2 py-1.5 text-xs w-full h-28 resize-y"
+                        />
+                      </div>
+                    ))}
                   </div>
                 ))}
+                {adInsightFeeds.length < MAX_AD_FEEDS && (
+                  <button
+                    type="button"
+                    onClick={addAdFeed}
+                    className="w-full border border-orange text-orange font-bold rounded-md py-2 text-sm bg-white"
+                  >
+                    + 피드 추가 ({adInsightFeeds.length}/{MAX_AD_FEEDS})
+                  </button>
+                )}
                 <button
                   onClick={handleAdInsightsPaste}
                   className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm"

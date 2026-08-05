@@ -26,9 +26,14 @@ function migrateDraft(saved, defaults) {
   const channelData = {};
   for (const ch of CHANNELS) {
     const savedForChannel = savedChannelData[ch.id];
+    const savedTables = { ...(savedForChannel?.tables || {}) };
+    // 광고 인사이트가 3개 고정이던 이전 초안은 새 구조의 첫 번째 피드로 자동 이관한다.
+    if (ch.id === "instagram" && savedTables.adInsights && !savedTables.adInsights1) {
+      savedTables.adInsights1 = savedTables.adInsights;
+    }
     channelData[ch.id] = {
       kpis: { ...(savedForChannel?.kpis || {}) },
-      tables: { ...(savedForChannel?.tables || {}) },
+      tables: savedTables,
       images: { ...(savedForChannel?.images || {}) },
     };
   }
