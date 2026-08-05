@@ -5,7 +5,12 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { CsvUploader, ImageUploader } from "./Uploader";
 import { runParser } from "../lib/parsers";
-import { parseInstagramInsightText, parseInstagramPostInsightText } from "../lib/parsers/instagramPaste";
+import {
+  buildInstagramAdInsightsTable,
+  parseInstagramAdInsightText,
+  parseInstagramInsightText,
+  parseInstagramPostInsightText,
+} from "../lib/parsers/instagramPaste";
 import { toImgArray } from "../lib/imageUtils";
 import { buildInstagramPostsTable, formatWon } from "../lib/postsTable";
 import {
@@ -17,6 +22,7 @@ import {
 } from "../lib/blogInsightFiles";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
+const EMPTY_AD_INSIGHT = { name: "", text: "" };
 const EMPTY_CAFE_POST = { cafeName: "", title: "", url: "" };
 
 function reportMonthToInput(value = "") {
@@ -29,6 +35,11 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
   const [igStatus, setIgStatus] = useState(null);
   const [igPasteText, setIgPasteText] = useState("");
   const [postInsights, setPostInsights] = useState([{ ...EMPTY_POST_INSIGHT }]);
+  const [adInsights, setAdInsights] = useState([
+    { name: "광고 1", text: "" },
+    { name: "광고 2", text: "" },
+    { name: "광고 3", text: "" },
+  ]);
   const [blogUrl, setBlogUrl] = useState("");
   const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
   const [blogStatus, setBlogStatus] = useState(null);
@@ -113,6 +124,20 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
     }
     onChange({ ...data, tables: { ...data.tables, posts: buildInstagramPostsTable(posts) } });
     setIgStatus({ type: "done", message: `게시물 인사이트 ${posts.length}건 반영 완료` });
+  }
+
+  function patchAdInsight(index, patch) {
+    setAdInsights((current) => current.map((ad, i) => (i === index ? { ...ad, ...patch } : ad)));
+  }
+
+  function handleAdInsightsPaste() {
+    const ads = adInsights.map((ad) => parseInstagramAdInsightText(ad.text, ad)).filter(Boolean);
+    if (ads.length === 0) {
+      setIgStatus({ type: "error", message: "인식할 수 있는 광고 인사이트가 없습니다." });
+      return;
+    }
+    onChange({ ...data, tables: { ...data.tables, adInsights: buildInstagramAdInsightsTable(ads) } });
+    setIgStatus({ type: "done", message: `광고 인사이트 ${ads.length}건 반영 완료 (타겟·주요 위치 포함)` });
   }
 
   function setInstagramDetail(tableKey, rowIndex, colIndex, value) {
@@ -380,6 +405,36 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
               >
                 게시물 인사이트 표에 반영
               </button>
+              <div className="border-t border-lightgray pt-3 space-y-3">
+                <div className="text-xs font-bold text-graytxt">
+                  피드 광고 인사이트 붙여넣기 (광고 3개)
+                </div>
+                <div className="text-[11px] text-graytxt">
+                  각 광고의 광고 개요 원문을 붙여넣으면 타겟과 주요 노출 위치까지 자동으로 표시됩니다.
+                </div>
+                {adInsights.map((ad, index) => (
+                  <div key={index} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
+                    <input
+                      placeholder={`광고 ${index + 1} 이름`}
+                      value={ad.name}
+                      onChange={(e) => patchAdInsight(index, { name: e.target.value })}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs w-full"
+                    />
+                    <textarea
+                      value={ad.text}
+                      onChange={(e) => patchAdInsight(index, { text: e.target.value })}
+                      placeholder={`광고 ${index + 1}의 '광고 개요' 원문을 붙여넣으세요.`}
+                      className="border border-lightgray rounded px-2 py-1.5 text-xs w-full h-28 resize-y"
+                    />
+                  </div>
+                ))}
+                <button
+                  onClick={handleAdInsightsPaste}
+                  className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm"
+                >
+                  광고 인사이트 페이지에 반영
+                </button>
+              </div>
               {igStatus?.type === "done" && (
                 <div className="text-xs text-green-700">✓ {igStatus.message}</div>
               )}
