@@ -159,10 +159,16 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
 
   function handleAdInsightsPaste() {
     const parsedFeeds = adInsightFeeds
-      .map((feed) => ({
-        name: feed.name.trim(),
-        ads: feed.ads.map((ad) => parseInstagramAdInsightText(ad.text, ad)).filter(Boolean),
-      }))
+      .map((feed, index) => {
+        const matchingPost = postInsights[index];
+        return {
+          // 게시물 N = 피드 N은 기본적으로 같은 게시일·주제를 쓴다. 피드 쪽에 직접 입력한
+          // 값이 있으면 그걸 우선하고, 비어 있을 때만 대응하는 게시물 값으로 채운다.
+          name: feed.name.trim() || matchingPost?.topic?.trim() || "",
+          date: feed.date || matchingPost?.date || "",
+          ads: feed.ads.map((ad) => parseInstagramAdInsightText(ad.text, ad)).filter(Boolean),
+        };
+      })
       .filter((feed) => feed.ads.length > 0);
     const adCount = parsedFeeds.reduce((sum, feed) => sum + feed.ads.length, 0);
     if (adCount === 0) {
@@ -466,7 +472,11 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
                 <div className="text-[11px] text-graytxt">
                   각 광고의 광고 개요 원문을 붙여넣으면 타겟과 주요 노출 위치까지 자동으로 표시됩니다.
                 </div>
-                {adInsightFeeds.map((feed, feedIndex) => (
+                {adInsightFeeds.map((feed, feedIndex) => {
+                  const matchingPost = postInsights[feedIndex];
+                  const willUseDate = feed.date || matchingPost?.date;
+                  const willUseName = feed.name.trim() || matchingPost?.topic;
+                  return (
                   <div key={feedIndex} className="border border-lightgray rounded-md p-2 bg-[#FAF8F5] space-y-2">
                     <div className="flex gap-2 items-center">
                       <input
@@ -492,6 +502,12 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
                         </button>
                       )}
                     </div>
+                    {(!feed.date || !feed.name.trim()) && matchingPost && (willUseDate || willUseName) && (
+                      <div className="text-[10px] text-graytxt -mt-1">
+                        ※ 비워두면 게시물 {feedIndex + 1}과 동일하게 적용됩니다{willUseDate ? ` (게시일 ${willUseDate})` : ""}
+                        {willUseName ? ` (주제 "${willUseName}")` : ""}
+                      </div>
+                    )}
                     {feed.ads.map((ad, adIndex) => (
                       <div key={adIndex} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
                         <input
@@ -509,7 +525,8 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
                       </div>
                     ))}
                   </div>
-                ))}
+                  );
+                })}
                 {adInsightFeeds.length < MAX_AD_FEEDS && (
                   <button
                     type="button"
