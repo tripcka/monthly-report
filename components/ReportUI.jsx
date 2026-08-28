@@ -72,13 +72,13 @@ export function SummaryBox({ title, body }) {
 }
 
 /** 원본 CSV를 그대로 표로 렌더링 (열 자동 감지, 첫 행이 헤더) */
-export function CsvTable({ label, rows }) {
+export function CsvTable({ label, rows, noBottomMargin }) {
   if (!rows || rows.length === 0) return null;
   const groupedAdHeader = rows.length >= 3 && rows[0]?.[0] === "구분" && rows[1]?.[0] === "" && rows[2]?.[0] === "타겟";
   if (groupedAdHeader) {
     const body = rows.slice(3);
     return (
-      <div className="mb-6">
+      <div className={noBottomMargin ? "" : "mb-6"}>
         {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
         <div className="overflow-hidden border border-lightgray rounded-md">
           <table className="w-full text-xs border-collapse table-fixed">
@@ -109,7 +109,7 @@ export function CsvTable({ label, rows }) {
   const header = rows[0];
   const body = rows.slice(1);
   return (
-    <div className="mb-6">
+    <div className={noBottomMargin ? "" : "mb-6"}>
       {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
       <div className="overflow-x-auto border border-lightgray rounded-md">
         <table className="w-full text-xs border-collapse">
@@ -168,9 +168,9 @@ export function SplitCsvTable({ label, rows, splitAt }) {
 }
 
 /** table.layout === 'split'이면 좌/우 분할, 아니면 일반 표 */
-export function AutoTable({ label, table, rows }) {
+export function AutoTable({ label, table, rows, noBottomMargin }) {
   if (table.layout === "split") return <SplitCsvTable label={label} rows={rows} splitAt={table.splitAt} />;
-  return <CsvTable label={label} rows={rows} />;
+  return <CsvTable label={label} rows={rows} noBottomMargin={noBottomMargin} />;
 }
 export function ImageSlot({ label, src }) {
   const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];

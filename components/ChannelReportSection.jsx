@@ -17,17 +17,32 @@ function GroupContent({ channel, group, data }) {
   const tablesInGroup = (group.tableKeys || []).map((k) => channel.tables.find((t) => t.key === k)).filter(Boolean);
   const imagesInGroup = (group.imageKeys || []).map((k) => channel.images.find((i) => i.key === k)).filter(Boolean);
 
+  function tableRowsFor(t) {
+    const sourceRows = data.tables[t.key];
+    const rowIndexes = group.tableRows?.[t.key];
+    let rows = rowIndexes ? rowIndexes.map((index) => sourceRows?.[index]).filter(Boolean) : sourceRows;
+    if (channel.id === "instagram" && t.key === "posts") rows = normalizeInstagramPostsRows(rows);
+    return rows;
+  }
+
+  const renderableTables = tablesInGroup
+    .map((t) => ({ t, rows: tableRowsFor(t) }))
+    .filter(({ rows }) => rows && rows.length > 0);
+
   return (
     <>
       <SectionTitle text={group.title} />
-      {tablesInGroup.map((t) => {
-        const sourceRows = data.tables[t.key];
-        const rowIndexes = group.tableRows?.[t.key];
-        let rows = rowIndexes ? rowIndexes.map((index) => sourceRows?.[index]).filter(Boolean) : sourceRows;
-        if (channel.id === "instagram" && t.key === "posts") rows = normalizeInstagramPostsRows(rows);
-        if (!rows || rows.length === 0) return null;
-        return <AutoTable key={t.key} label={null} table={t} rows={rows} />;
-      })}
+      {group.layout === "sideBySide" && renderableTables.length > 1 ? (
+        <div className="flex gap-3 items-start mb-6">
+          {renderableTables.map(({ t, rows }) => (
+            <div key={t.key} className="flex-1 min-w-0">
+              <AutoTable label={null} table={t} rows={rows} noBottomMargin />
+            </div>
+          ))}
+        </div>
+      ) : (
+        renderableTables.map(({ t, rows }) => <AutoTable key={t.key} label={null} table={t} rows={rows} />)
+      )}
       {group.kpiDetail && (
         <>
           <SectionTitle text={group.kpiDetail.title} />

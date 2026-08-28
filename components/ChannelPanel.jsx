@@ -29,7 +29,7 @@ const EMPTY_CAFE_POST = { cafeName: "", title: "", url: "" };
 
 function makeAdFeed(feedIndex) {
   return {
-    name: `피드 ${feedIndex + 1}`,
+    name: "",
     date: "",
     ads: Array.from({ length: ADS_PER_FEED }, (_, adIndex) => ({
       ...EMPTY_AD_INSIGHT,
