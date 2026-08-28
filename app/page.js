@@ -8,7 +8,7 @@ import { CoverPage, SummaryPage, ClosingPage } from "../components/FixedSections
 import { exportPptx } from "../lib/pptxExport";
 import { exportPreviewPptx } from "../lib/previewPptxExport";
 import { useDraft } from "../lib/useDraft";
-import { getAccessToken, uploadBlobToDrive, extractFolderId } from "../lib/googleDrive";
+import { getAccessToken, uploadBlobToDrive, extractFolderId, uploadJsonToDrive, listDraftsFromDrive, downloadJsonFromDrive } from "../lib/googleDrive";
 
 const DEFAULT_STATE = {
   hotelName: "",
@@ -42,12 +42,41 @@ function migrateDraft(saved, defaults) {
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
+// 같은 호텔·같은 달로 "Drive에 임시저장"을 여러 번 누르면 파일이 계속 늘어나지 않도록,
+// 어떤 (호텔,달) 조합을 어떤 Drive 파일ID에 마지막으로 저장했는지 브라우저에 기억해둔다.
+// (이 정보 자체는 데이터가 아니라 "어디에 저장했는지" 포인터라 useDraft와 분리해서 관리)
+const DRAFT_ID_MAP_KEY = "tripicka-draft-drive-ids";
+
+function draftMapKey(hotelName, month) {
+  return `${(hotelName || "").trim()}|${(month || "").trim()}`;
+}
+function getTrackedDraftId(hotelName, month) {
+  try {
+    const map = JSON.parse(window.localStorage.getItem(DRAFT_ID_MAP_KEY) || "{}");
+    return map[draftMapKey(hotelName, month)] || null;
+  } catch {
+    return null;
+  }
+}
+function setTrackedDraftId(hotelName, month, fileId) {
+  try {
+    const map = JSON.parse(window.localStorage.getItem(DRAFT_ID_MAP_KEY) || "{}");
+    map[draftMapKey(hotelName, month)] = fileId;
+    window.localStorage.setItem(DRAFT_ID_MAP_KEY, JSON.stringify(map));
+  } catch {
+    // localStorage 접근 실패는 조용히 무시 — 다음 저장 때 새 파일이 하나 더 생기는 정도의 부작용뿐
+  }
+}
+
 export default function Page() {
   const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE, migrateDraft);
   const [exporting, setExporting] = useState(null); // 'preview' | 'editable' | null
   const [driveStatus, setDriveStatus] = useState(null); // { type: 'saving'|'done'|'error', message }
   const [saveAsGoogleSlides, setSaveAsGoogleSlides] = useState(true);
   const [drivePptxMode, setDrivePptxMode] = useState("preview");
+  const [draftSyncStatus, setDraftSyncStatus] = useState(null);
+  const [draftList, setDraftList] = useState(null); // null=아직 안 불러옴, [] 이상=목록
+  const [showDraftPicker, setShowDraftPicker] = useState(false);
 
   const { hotelName, month, channelData, driveFolderInput } = state;
   const activeChannels = CHANNELS.filter((ch) => isChannelActive(channelData[ch.id], ch));
@@ -93,6 +122,64 @@ export default function Page() {
       });
     } catch (e) {
       setDriveStatus({ type: "error", message: e.message || String(e) });
+    }
+  }
+
+  async function handleSaveDraftToDrive() {
+    if (!hotelName.trim() || !month.trim()) {
+      setDraftSyncStatus({ type: "error", message: "호텔명과 보고 월을 먼저 입력해 주세요 (임시저장 파일명·구분 기준입니다)." });
+      return;
+    }
+    setDraftSyncStatus({ type: "saving", message: "Google 로그인 확인 중..." });
+    try {
+      const token = await getAccessToken(GOOGLE_CLIENT_ID);
+      setDraftSyncStatus({ type: "saving", message: "Drive에 저장 중..." });
+      const folderId = extractFolderId(driveFolderInput);
+      const fileName = `${hotelName}_${month}_임시저장.json`;
+      const existingId = getTrackedDraftId(hotelName, month);
+      let result;
+      try {
+        result = await uploadJsonToDrive({ accessToken: token, data: state, fileName, folderId, fileId: existingId });
+      } catch (e) {
+        // 기억해둔 fileId가 더 이상 유효하지 않으면(삭제됨 등) 새 파일로 다시 시도
+        if (existingId && (e.status === 404 || e.status === 403)) {
+          result = await uploadJsonToDrive({ accessToken: token, data: state, fileName, folderId });
+        } else {
+          throw e;
+        }
+      }
+      setTrackedDraftId(hotelName, month, result.id);
+      setDraftSyncStatus({ type: "done", message: "임시저장 완료! 다른 기기·브라우저에서도 아래 '불러오기'로 이어서 작업할 수 있어요.", link: result.webViewLink });
+      setDraftList(null); // 목록 캐시 무효화 (다음에 열 때 새로 불러오도록)
+    } catch (e) {
+      setDraftSyncStatus({ type: "error", message: e.message || String(e) });
+    }
+  }
+
+  async function handleOpenDraftPicker() {
+    setShowDraftPicker(true);
+    if (draftList !== null) return; // 이미 불러온 목록 있으면 재사용
+    setDraftSyncStatus({ type: "saving", message: "임시저장 목록 불러오는 중..." });
+    try {
+      const token = await getAccessToken(GOOGLE_CLIENT_ID);
+      const files = await listDraftsFromDrive({ accessToken: token });
+      setDraftList(files);
+      setDraftSyncStatus(null);
+    } catch (e) {
+      setDraftSyncStatus({ type: "error", message: e.message || String(e) });
+    }
+  }
+
+  async function handleLoadDraft(fileId) {
+    setDraftSyncStatus({ type: "saving", message: "불러오는 중..." });
+    try {
+      const token = await getAccessToken(GOOGLE_CLIENT_ID);
+      const data = await downloadJsonFromDrive({ accessToken: token, fileId });
+      setState(migrateDraft(data, DEFAULT_STATE));
+      setShowDraftPicker(false);
+      setDraftSyncStatus({ type: "done", message: `"${data.hotelName || "-"} · ${data.month || "-"}" 불러왔습니다.` });
+    } catch (e) {
+      setDraftSyncStatus({ type: "error", message: e.message || String(e) });
     }
   }
 
@@ -214,6 +301,71 @@ export default function Page() {
           {!GOOGLE_CLIENT_ID && (
             <div className="text-[10px] text-muted mt-2">
               (Google 저장 기능을 쓰려면 배포 환경에 NEXT_PUBLIC_GOOGLE_CLIENT_ID 설정 필요 — README 참고)
+            </div>
+          )}
+        </div>
+
+        <div className="border border-lightgray rounded-md p-3 mb-5 bg-white">
+          <div className="text-xs font-bold text-graytxt mb-1">임시저장 (Drive에서 이어서 작업하기)</div>
+          <div className="text-[10px] text-muted mb-2">
+            지금 입력한 내용(업로드한 표·이미지 포함) 전체를 Drive에 저장합니다. 같은 호텔·같은 달로 다시
+            저장하면 새 파일을 또 만들지 않고 기존 파일을 덮어써요. 다른 컴퓨터·브라우저에서도 아래
+            "불러오기"로 이어서 작업할 수 있습니다 (자동 임시저장은 이 브라우저에만 남는 것과 달리, 이건
+            Drive를 거쳐 어디서든 불러올 수 있어요).
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleSaveDraftToDrive}
+              disabled={draftSyncStatus?.type === "saving"}
+              className="bg-navy text-white font-bold rounded-md py-2 text-xs disabled:opacity-50"
+            >
+              {draftSyncStatus?.type === "saving" ? "저장 중..." : "Drive에 임시저장"}
+            </button>
+            <button
+              onClick={handleOpenDraftPicker}
+              disabled={draftSyncStatus?.type === "saving"}
+              className="bg-white text-navy border border-navy font-bold rounded-md py-2 text-xs disabled:opacity-50"
+            >
+              Drive에서 불러오기
+            </button>
+          </div>
+          {draftSyncStatus?.type === "done" && (
+            <div className="text-xs text-green-700 mt-2">✓ {draftSyncStatus.message}</div>
+          )}
+          {draftSyncStatus?.type === "error" && (
+            <div className="text-xs text-red-600 mt-2 whitespace-pre-wrap">⚠ {draftSyncStatus.message}</div>
+          )}
+
+          {showDraftPicker && (
+            <div className="mt-3 border-t border-lightgray pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-graytxt">임시저장 목록</div>
+                <button onClick={() => setShowDraftPicker(false)} className="text-[11px] text-muted underline">
+                  닫기
+                </button>
+              </div>
+              {draftList === null && draftSyncStatus?.type === "saving" && (
+                <div className="text-xs text-muted">불러오는 중...</div>
+              )}
+              {draftList?.length === 0 && (
+                <div className="text-xs text-muted">아직 Drive에 저장된 임시저장 파일이 없습니다.</div>
+              )}
+              {draftList && draftList.length > 0 && (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {draftList.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => handleLoadDraft(f.id)}
+                      className="w-full text-left border border-lightgray rounded-md px-2.5 py-2 text-xs hover:bg-card"
+                    >
+                      <div className="font-bold text-navy">{f.name.replace(/_임시저장\.json$/, "")}</div>
+                      <div className="text-[10px] text-muted">
+                        {new Date(f.modifiedTime).toLocaleString("ko-KR")}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
