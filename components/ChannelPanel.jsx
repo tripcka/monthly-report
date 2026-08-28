@@ -44,7 +44,7 @@ function reportMonthToInput(value = "") {
   return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}`;
 }
 
-export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
+export default function ChannelPanel({ channel, data, onChange, reportMonth, hotelName }) {
   const [igStatus, setIgStatus] = useState(null);
   const [igPasteText, setIgPasteText] = useState("");
   const [postInsights, setPostInsights] = useState([{ ...EMPTY_POST_INSIGHT }]);
@@ -72,7 +72,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
 
   function applyUploadedRows(upload, inputRows) {
     const rows = (inputRows || []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
-    const { kpis, tables } = runParser(upload, rows);
+    const { kpis, tables } = runParser(upload, rows, { hotelName, month: reportMonth });
     const nextTables = { ...data.tables, ...tables };
     if (channel.id === "brandBlog" && upload.targetTable === "posts" && nextTables.posts) {
       nextTables.posts = sortBlogPostsOldestFirst(nextTables.posts);
@@ -240,12 +240,16 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
       setSheetStatus({ type: "error", message: "구글 시트 URL을 입력해 주세요." });
       return;
     }
+    if (!hotelName?.trim()) {
+      setSheetStatus({ type: "error", message: "먼저 왼쪽 위 호텔명을 입력해 주세요 (통합 시트에서 호텔을 구분하는 기준입니다)." });
+      return;
+    }
     setSheetStatus({ type: "loading", message: "구글 시트에서 불러오는 중..." });
     try {
       const response = await fetch("/api/sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sheetUrl: sheetUrl.trim() }),
+        body: JSON.stringify({ sheetUrl: sheetUrl.trim(), hotelName: hotelName.trim(), month: reportMonth }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "구글 시트를 불러오지 못했습니다.");
@@ -255,7 +259,10 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
         tables: { ...data.tables, ...result.tables },
       });
       const rowCount = (result.tables?.roster?.length || 1) - 1;
-      setSheetStatus({ type: "done", message: `체험단 ${rowCount}건을 반영했습니다.` });
+      setSheetStatus({
+        type: result.note ? "error" : "done",
+        message: result.note || `${hotelName} · ${reportMonth || "이번 달"} 체험단 ${rowCount}건을 반영했습니다.`,
+      });
     } catch (error) {
       setSheetStatus({ type: "error", message: error.message || String(error) });
     }
@@ -547,7 +554,10 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth }) {
               {sheetStatus?.type === "loading" ? sheetStatus.message : "구글 시트 불러오기"}
             </button>
             <div className="text-[10px] text-muted">
-              시트 공유 설정에서 "링크가 있는 모든 사용자 - 뷰어" 이상으로 열려 있어야 불러올 수 있습니다. 헤더 행 위치는 자동으로 찾습니다 (성함/이름 열 기준).
+              시트 공유 설정에서 "링크가 있는 모든 사용자 - 뷰어" 이상으로 열려 있어야 불러올 수 있습니다.
+              통합 시트(모든 호텔·모든 월이 한 탭에 있는 "캠페인ID"/"호텔ID" 형식)를 붙여넣으면, 왼쪽 위에
+              입력한 호텔명과 보고 월에 맞는 행만 자동으로 걸러서 가져옵니다. 헤더 행 위치는 자동으로
+              찾습니다 (성함/이름 열 기준).
             </div>
             {sheetStatus?.type === "done" && <div className="text-xs text-green-700">✓ {sheetStatus.message}</div>}
             {sheetStatus?.type === "error" && (
