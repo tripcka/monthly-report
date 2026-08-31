@@ -167,9 +167,52 @@ export function SplitCsvTable({ label, rows, splitAt }) {
   );
 }
 
-/** table.layout === 'split'이면 좌/우 분할, 아니면 일반 표 */
+/**
+ * "주간/월간 유입" 표 전용 렌더러 — 왼쪽은 주차별 방문횟수, 오른쪽은 그 합계("총유입")를
+ * 세로로 병합해서 딱 한 번만 보여준다 (네이버 블로그 통계에서 흔히 쓰는 레이아웃).
+ * rows의 마지막 행이 ["__TOTAL__", 합계]로 들어온다는 약속 하에 동작한다.
+ */
+export function WeeklyInflowTable({ label, rows, noBottomMargin }) {
+  if (!rows || rows.length < 2) return null;
+  const totalRowIndex = rows.findIndex((r) => r[0] === "__TOTAL__");
+  const total = totalRowIndex >= 0 ? rows[totalRowIndex][1] : null;
+  const weekRows = rows.slice(1, totalRowIndex >= 0 ? totalRowIndex : undefined);
+  if (weekRows.length === 0) return null;
+  return (
+    <div className={noBottomMargin ? "" : "mb-6"}>
+      {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
+      <div className="flex border border-lightgray rounded-md overflow-hidden">
+        <table className="flex-1 text-xs border-collapse">
+          <thead className="bg-[#F0EDE7] text-navy">
+            <tr>
+              <th className="px-3 py-2 border-b border-lightgray">기간</th>
+              <th className="px-3 py-2 border-b border-lightgray">방문 횟수</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weekRows.map((r, i) => (
+              <tr key={i} className={i % 2 === 0 ? "bg-[#FAF8F5]" : "bg-white"}>
+                <td className="px-3 py-1.5 text-center border-t border-lightgray">{r[0]}</td>
+                <td className="px-3 py-1.5 text-center border-t border-lightgray">{r[1]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {total !== null && (
+          <div className="w-40 shrink-0 border-l border-lightgray bg-[#F0EDE7] flex flex-col items-center justify-center">
+            <div className="text-navy font-bold text-xs mb-1">총유입</div>
+            <div className="text-orange font-bold text-lg">{total}회</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** table.layout === 'split'이면 좌/우 분할, 'weeklyInflow'면 총유입 병합 표, 아니면 일반 표 */
 export function AutoTable({ label, table, rows, noBottomMargin }) {
   if (table.layout === "split") return <SplitCsvTable label={label} rows={rows} splitAt={table.splitAt} />;
+  if (table.layout === "weeklyInflow") return <WeeklyInflowTable label={label} rows={rows} noBottomMargin={noBottomMargin} />;
   return <CsvTable label={label} rows={rows} noBottomMargin={noBottomMargin} />;
 }
 export function ImageSlot({ label, src }) {

@@ -16,10 +16,12 @@ import { buildInstagramPostsTable, formatWon } from "../lib/postsTable";
 import {
   BLOG_POST_HEADER,
   ensureBlogPostColumns,
-  mergeBlogInsights,
-  parseBlogInsightWorkbook,
   sortBlogPostsOldestFirst,
 } from "../lib/blogInsightFiles";
+import {
+  parseNaverVisitCounts,
+  parseNaverInflowKeywords,
+} from "../lib/parsers/naverBlogStats";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
 const EMPTY_AD_INSIGHT = { name: "", text: "" };
@@ -52,7 +54,12 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
   const [blogUrl, setBlogUrl] = useState("");
   const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
   const [blogStatus, setBlogStatus] = useState(null);
-  const [blogInsightStatus, setBlogInsightStatus] = useState(null);
+  const [postsPasteText, setPostsPasteText] = useState("");
+  const [postsPasteStatus, setPostsPasteStatus] = useState(null);
+  const [visitPasteText, setVisitPasteText] = useState("");
+  const [visitPasteStatus, setVisitPasteStatus] = useState(null);
+  const [keywordPasteText, setKeywordPasteText] = useState("");
+  const [keywordPasteStatus, setKeywordPasteStatus] = useState(null);
   const [sheetUrl, setSheetUrl] = useState("");
   const [sheetStatus, setSheetStatus] = useState(null);
   const [cafePosts, setCafePosts] = useState([{ ...EMPTY_CAFE_POST }]);
@@ -337,35 +344,62 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
     });
   }
 
-  async function handleBlogInsightFiles(files) {
-    const selected = [...files];
-    if (selected.length === 0) return;
-    setBlogInsightStatus({ type: "loading", message: `${selected.length}개 파일 분석 중...` });
-    const parsed = [];
-    const errors = [];
-    for (const file of selected) {
-      try {
-        parsed.push(parseBlogInsightWorkbook(await file.arrayBuffer(), file.name));
-      } catch (error) {
-        errors.push(error.message || `${file.name}: 분석 실패`);
-      }
+  function handlePostsPaste() {
+    if (!postsPasteText.trim()) {
+      setPostsPasteStatus({ type: "error", message: "붙여넣은 내용이 없습니다." });
+      return;
     }
-    const result = mergeBlogInsights(data.tables.posts, parsed);
-    onChange({ ...data, tables: { ...data.tables, posts: result.rows } });
-
-    const messages = [`엑셀 내부 제목 기준으로 포스팅 ${result.matchedPostCount}건에 조회수·유입 키워드를 반영했습니다.`];
-    if (result.unmatched.length > 0) {
-      messages.push(
-        `제목 불일치 ${result.unmatched.length}건:\n${result.unmatched
-          .map(({ title }) => `- ${title}`)
-          .join("\n")}`
-      );
-    }
-    if (errors.length > 0) messages.push(errors.join("\n"));
-    setBlogInsightStatus({
-      type: result.unmatched.length > 0 || errors.length > 0 ? "error" : "done",
-      message: messages.join("\n"),
+    Papa.parse(postsPasteText.trim(), {
+      skipEmptyLines: true,
+      complete: (result) => {
+        const rows = (result.data || []).filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
+        if (rows.length === 0) {
+          setPostsPasteStatus({ type: "error", message: "인식할 수 있는 행이 없습니다. 엑셀/시트에서 표를 그대로 복사해서 붙여넣어 주세요." });
+          return;
+        }
+        // 첫 행이 "업로드일자/제목/..." 같은 헤더면 그대로, 아니면 표준 헤더를 앞에 붙인다.
+        const looksLikeHeader = /제목|일자|날짜|링크|url|조회|키워드/i.test(rows[0].join(""));
+        const finalRows = looksLikeHeader ? rows : [BLOG_POST_HEADER, ...rows];
+        onChange({ ...data, tables: { ...data.tables, posts: sortBlogPostsOldestFirst(finalRows) } });
+        setPostsPasteStatus({ type: "done", message: `포스팅 ${finalRows.length - 1}건을 반영했습니다.` });
+      },
     });
+  }
+
+  function handleVisitCountsPaste() {
+    if (!visitPasteText.trim()) {
+      setVisitPasteStatus({ type: "error", message: "붙여넣은 내용이 없습니다." });
+      return;
+    }
+    const { weeks, total, allWeeksFound } = parseNaverVisitCounts(visitPasteText, { month: reportMonth });
+    if (weeks.length === 0) {
+      setVisitPasteStatus({
+        type: "error",
+        message:
+          allWeeksFound > 0
+            ? `주차별 데이터 ${allWeeksFound}건을 찾았지만, 보고 월(${reportMonth || "미입력"})에 해당하는 주가 없습니다. 왼쪽 위 "보고 월"을 확인해 주세요.`
+            : "주차별 방문 횟수 데이터를 찾지 못했습니다. 네이버 블로그 통계 > 방문 횟수 페이지 전체를 그대로 복사해서 붙여넣어 주세요.",
+      });
+      return;
+    }
+    const table = [["기간", "방문 횟수"], ...weeks, ["__TOTAL__", String(total)]];
+    onChange({ ...data, tables: { ...data.tables, weeklyInflow: table } });
+    setVisitPasteStatus({ type: "done", message: `${weeks.length}개 주차 · 합계 ${total}회를 반영했습니다.` });
+  }
+
+  function handleKeywordsPaste() {
+    if (!keywordPasteText.trim()) {
+      setKeywordPasteStatus({ type: "error", message: "붙여넣은 내용이 없습니다." });
+      return;
+    }
+    const keywords = parseNaverInflowKeywords(keywordPasteText);
+    if (keywords.length === 0) {
+      setKeywordPasteStatus({ type: "error", message: "유입 키워드를 찾지 못했습니다. 네이버 블로그 통계 > 유입분석 > 검색 유입 페이지의 '유입경로' 목록을 그대로 복사해서 붙여넣어 주세요." });
+      return;
+    }
+    const table = [["순위", "키워드", "비고"], ...keywords.map((kw, i) => [i + 1, kw, ""])];
+    onChange({ ...data, tables: { ...data.tables, inflowKeywords: table } });
+    setKeywordPasteStatus({ type: "done", message: `키워드 ${keywords.length}건을 반영했습니다.` });
   }
 
   return (
@@ -678,29 +712,70 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
               <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {blogStatus.message}</div>
             )}
             <div className="border-t border-lightgray pt-3 space-y-2">
-              <div className="text-xs font-bold text-graytxt">게시물 통계 엑셀 한 번에 업로드</div>
-              <label className="block border border-dashed border-[#C8C0B6] rounded-md p-3 text-center text-xs cursor-pointer bg-white hover:border-orange">
-                조회수·유입분석 엑셀 여러 개 선택
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    handleBlogInsightFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              <div className="text-[10px] text-muted">
-                파일명이 아닌 각 엑셀 시트 내부의 ‘게시물 제목’을 기준으로, 불러온 포스팅에 조회수와 상위 유입 키워드 5개를 자동 매칭합니다.
+              <div className="text-xs font-bold text-graytxt">
+                포스팅 현황 붙여넣기 (일자/제목/링크/조회수/유입키워드 — 엑셀·시트에서 표 그대로 복사)
               </div>
-              {blogInsightStatus?.type === "loading" && <div className="text-xs text-graytxt">{blogInsightStatus.message}</div>}
-              {blogInsightStatus?.type === "done" && (
-                <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {blogInsightStatus.message}</div>
+              <textarea
+                value={postsPasteText}
+                onChange={(e) => setPostsPasteText(e.target.value)}
+                placeholder="엑셀·구글시트에서 표를 선택해 복사한 뒤 그대로 붙여넣으세요. 위 자동 불러오기로 만든 포스팅 목록에 조회수·유입키워드를 채워 넣을 때도 같은 형식으로 붙여넣으면 됩니다."
+                className="border border-lightgray rounded-md px-3 py-2 text-xs w-full h-24 resize-y bg-white"
+              />
+              <button
+                onClick={handlePostsPaste}
+                className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm"
+              >
+                표에 반영
+              </button>
+              {postsPasteStatus?.type === "done" && (
+                <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {postsPasteStatus.message}</div>
               )}
-              {blogInsightStatus?.type === "error" && (
-                <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {blogInsightStatus.message}</div>
+              {postsPasteStatus?.type === "error" && (
+                <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {postsPasteStatus.message}</div>
+              )}
+            </div>
+
+            <div className="border-t border-lightgray pt-3 space-y-2">
+              <div className="text-xs font-bold text-graytxt">방문 횟수 붙여넣기 (네이버 블로그 통계 &gt; 방문 횟수)</div>
+              <textarea
+                value={visitPasteText}
+                onChange={(e) => setVisitPasteText(e.target.value)}
+                placeholder="네이버 블로그 관리 > 내 블로그 통계 > 방문 횟수 페이지를 전체 드래그해서 그대로 붙여넣으세요. 왼쪽 위 '보고 월'에 해당하는 주(週)만 자동으로 골라내 합계까지 계산합니다."
+                className="border border-lightgray rounded-md px-3 py-2 text-xs w-full h-24 resize-y bg-white"
+              />
+              <button
+                onClick={handleVisitCountsPaste}
+                className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm"
+              >
+                표에 반영
+              </button>
+              {visitPasteStatus?.type === "done" && (
+                <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {visitPasteStatus.message}</div>
+              )}
+              {visitPasteStatus?.type === "error" && (
+                <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {visitPasteStatus.message}</div>
+              )}
+            </div>
+
+            <div className="border-t border-lightgray pt-3 space-y-2">
+              <div className="text-xs font-bold text-graytxt">유입 키워드 붙여넣기 (네이버 블로그 통계 &gt; 유입분석 &gt; 검색 유입)</div>
+              <textarea
+                value={keywordPasteText}
+                onChange={(e) => setKeywordPasteText(e.target.value)}
+                placeholder="유입분석 페이지의 '유입경로' 목록(키워드·비율)을 그대로 붙여넣으세요. 상위 10개를 순위표로 만듭니다."
+                className="border border-lightgray rounded-md px-3 py-2 text-xs w-full h-24 resize-y bg-white"
+              />
+              <button
+                onClick={handleKeywordsPaste}
+                className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm"
+              >
+                표에 반영
+              </button>
+              {keywordPasteStatus?.type === "done" && (
+                <div className="text-xs text-green-700 whitespace-pre-wrap">✓ {keywordPasteStatus.message}</div>
+              )}
+              {keywordPasteStatus?.type === "error" && (
+                <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {keywordPasteStatus.message}</div>
               )}
             </div>
           </div>
