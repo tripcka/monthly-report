@@ -6,13 +6,24 @@
 // 폰트: Noto Sans KR
 // ============================================================================
 
-export function PageShell({ dark = false, children }) {
+export function PageShell({ dark = false, children, onRemove }) {
   return (
     <div
       className={`report-page relative w-[1280px] h-[720px] overflow-hidden mx-auto p-10 ${
         dark ? "bg-navy text-white" : "bg-white text-graytxt"
       }`}
     >
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          className={`export-ignore absolute top-3 right-3 z-10 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+            dark ? "bg-white/10 text-white hover:bg-white/20" : "bg-black/5 text-graytxt hover:bg-black/10"
+          }`}
+          title="이 슬라이드 삭제"
+        >
+          ✕
+        </button>
+      )}
       {children}
     </div>
   );

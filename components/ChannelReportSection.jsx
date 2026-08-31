@@ -64,12 +64,12 @@ function GroupContent({ channel, group, data }) {
   );
 }
 
-function OverviewSlide({ channel, mergeGroups, data, hotelName }) {
+function OverviewSlide({ channel, mergeGroups, data, hotelName, onRemove }) {
   const usedImageKeys = new Set((channel.slideGroups || []).flatMap((g) => g.imageKeys || []));
   const overviewImages = channel.images.filter((img) => !usedImageKeys.has(img.key));
 
   return (
-    <PageShell>
+    <PageShell onRemove={onRemove}>
       <PageTitle kicker={channel.kicker} title={channel.title} />
       {channel.kpis.filter((k) => !k.detailOnly).length > 0 && (
         <StatCardRow>
@@ -89,12 +89,12 @@ function OverviewSlide({ channel, mergeGroups, data, hotelName }) {
   );
 }
 
-function GroupSlide({ channel, group, data, hotelName }) {
+function GroupSlide({ channel, group, data, hotelName, onRemove }) {
   const detailKpis = (group.kpiKeys || [])
     .map((key) => channel.kpis.find((k) => k.key === key))
     .filter(Boolean);
   return (
-    <PageShell>
+    <PageShell onRemove={onRemove}>
       <PageTitle kicker={channel.kicker} title={channel.title} />
       {detailKpis.length > 0 && (
         <StatCardRow>
@@ -107,9 +107,9 @@ function GroupSlide({ channel, group, data, hotelName }) {
   );
 }
 
-function SimpleSlide({ channel, data, hotelName }) {
+function SimpleSlide({ channel, data, hotelName, onRemove }) {
   return (
-    <PageShell>
+    <PageShell onRemove={onRemove}>
       <PageTitle kicker={channel.kicker} title={channel.title} />
       {channel.kpis.length > 0 && (
         <StatCardRow>
@@ -131,7 +131,10 @@ function SimpleSlide({ channel, data, hotelName }) {
   );
 }
 
-export default function ChannelReportSection({ channel, data, hotelName }) {
+export default function ChannelReportSection({ channel, data, hotelName, hiddenSlides, onToggleSlide }) {
+  const isHidden = (slideId) => hiddenSlides?.has?.(slideId);
+  const remove = (slideId) => (onToggleSlide ? () => onToggleSlide(slideId) : undefined);
+
   if (channel.slideGroups) {
     const mergeGroups = channel.slideGroups.filter((g) => g.mergeIntoOverview);
     const otherGroups = channel.slideGroups.filter((g) => !g.mergeIntoOverview);
@@ -141,18 +144,38 @@ export default function ChannelReportSection({ channel, data, hotelName }) {
       (img) => !usedImageKeys.has(img.key) && toImgArray(data.images[img.key]).length > 0
     );
     const showOverview = channel.kpis.some((k) => !k.detailOnly) || mergeGroupsWithData.length > 0 || hasOverviewImages;
+    const overviewId = `${channel.id}:overview`;
 
     return (
       <>
-        {showOverview && (
-          <OverviewSlide channel={channel} mergeGroups={mergeGroupsWithData} data={data} hotelName={hotelName} />
+        {showOverview && !isHidden(overviewId) && (
+          <OverviewSlide
+            channel={channel}
+            mergeGroups={mergeGroupsWithData}
+            data={data}
+            hotelName={hotelName}
+            onRemove={remove(overviewId)}
+          />
         )}
-        {otherGroups.map((group) => {
+        {otherGroups.map((group, index) => {
           if (!groupHasData(group, data)) return null;
-          return <GroupSlide key={group.title} channel={channel} group={group} data={data} hotelName={hotelName} />;
+          const groupId = `${channel.id}:${index}:${group.title}`;
+          if (isHidden(groupId)) return null;
+          return (
+            <GroupSlide
+              key={groupId}
+              channel={channel}
+              group={group}
+              data={data}
+              hotelName={hotelName}
+              onRemove={remove(groupId)}
+            />
+          );
         })}
       </>
     );
   }
-  return <SimpleSlide channel={channel} data={data} hotelName={hotelName} />;
+  const simpleId = `${channel.id}:simple`;
+  if (isHidden(simpleId)) return null;
+  return <SimpleSlide channel={channel} data={data} hotelName={hotelName} onRemove={remove(simpleId)} />;
 }

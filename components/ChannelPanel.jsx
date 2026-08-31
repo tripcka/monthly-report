@@ -81,12 +81,16 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
     const rows = (inputRows || []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
     const { kpis, tables } = runParser(upload, rows, { hotelName, month: reportMonth });
     const nextTables = { ...data.tables, ...tables };
+    const nextKpis = { ...data.kpis, ...kpis };
     if (channel.id === "brandBlog" && upload.targetTable === "posts" && nextTables.posts) {
       nextTables.posts = sortBlogPostsOldestFirst(nextTables.posts);
     }
+    if (channel.id === "cafeViral" && upload.targetTable === "posts" && nextTables.posts) {
+      nextKpis.postCount = `${Math.max(nextTables.posts.length - 1, 0)}건`;
+    }
     onChange({
       ...data,
-      kpis: { ...data.kpis, ...kpis },
+      kpis: nextKpis,
       tables: nextTables,
     });
   }
@@ -314,7 +318,7 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
       results.push([entry.cafeName.trim() || "-", title || "-", entry.url.trim()]);
     }
     const table = [["카페명", "제목", "포스팅 URL"], ...results];
-    onChange({ ...data, tables: { ...data.tables, posts: table } });
+    onChange({ ...data, kpis: { ...data.kpis, postCount: `${results.length}건` }, tables: { ...data.tables, posts: table } });
 
     if (autoFetchFailed.length > 0) {
       setCafeStatus({

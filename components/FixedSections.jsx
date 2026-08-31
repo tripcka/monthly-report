@@ -4,9 +4,9 @@ import { PageShell, SummaryBox, Footer } from "./ReportUI";
 import { summarizeChannel } from "../lib/summarize";
 import { LOGO_WHITE } from "../lib/brandAssets";
 
-export function CoverPage({ hotelName, month }) {
+export function CoverPage({ hotelName, month, onRemove }) {
   return (
-    <PageShell dark>
+    <PageShell dark onRemove={onRemove}>
       <img src={LOGO_WHITE} alt="Tripicka" className="mt-6 h-8" />
       <div className="mt-40 text-white font-bold text-[47px]">{hotelName || "[호텔명]"}</div>
       <div className="mt-4 text-gray-300 text-[47px]">월별 마케팅 운영 보고서</div>
@@ -15,9 +15,9 @@ export function CoverPage({ hotelName, month }) {
   );
 }
 
-export function SummaryPage({ hotelName, activeChannels, channelData }) {
+export function SummaryPage({ hotelName, activeChannels, channelData, onRemove }) {
   return (
-    <PageShell>
+    <PageShell onRemove={onRemove}>
       <div className="mb-6">
         <div className="text-orange font-bold text-sm tracking-widest mb-1">OVERVIEW</div>
         <div className="text-navy font-bold text-3xl">운영 요약 Summary</div>
@@ -37,9 +37,9 @@ export function SummaryPage({ hotelName, activeChannels, channelData }) {
   );
 }
 
-export function ClosingPage({ hotelName, month }) {
+export function ClosingPage({ hotelName, month, onRemove }) {
   return (
-    <PageShell dark>
+    <PageShell dark onRemove={onRemove}>
       <div className="pt-40">
         <img src={LOGO_WHITE} alt="Tripicka" className="h-8" />
         <div className="mt-4 text-white font-bold text-4xl">감사합니다.</div>

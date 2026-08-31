@@ -8,13 +8,14 @@ import { CoverPage, SummaryPage, ClosingPage } from "../components/FixedSections
 import { exportPptx } from "../lib/pptxExport";
 import { exportPreviewPptx } from "../lib/previewPptxExport";
 import { useDraft } from "../lib/useDraft";
-import { getAccessToken, uploadBlobToDrive, extractFolderId, uploadJsonToDrive, listDraftsFromDrive, downloadJsonFromDrive } from "../lib/googleDrive";
+import { getAccessToken, uploadBlobToDrive, extractFolderId, uploadJsonToDrive, listDraftsFromDrive, downloadJsonFromDrive, deleteFileFromDrive } from "../lib/googleDrive";
 
 const DEFAULT_STATE = {
   hotelName: "",
   month: "",
   driveFolderInput: "",
   channelData: emptyChannelData(),
+  hiddenSlides: [], // 사용자가 "이 슬라이드 삭제"로 숨긴 슬라이드 ID 목록 (JSON 저장을 위해 배열로 보관)
 };
 
 // 저장된 초안(localStorage)이 이전 버전의 채널 구성으로 만들어졌을 수 있으므로
@@ -67,6 +68,15 @@ function setTrackedDraftId(hotelName, month, fileId) {
     // localStorage 접근 실패는 조용히 무시 — 다음 저장 때 새 파일이 하나 더 생기는 정도의 부작용뿐
   }
 }
+function clearTrackedDraftIdByFileId(fileId) {
+  try {
+    const map = JSON.parse(window.localStorage.getItem(DRAFT_ID_MAP_KEY) || "{}");
+    const nextMap = Object.fromEntries(Object.entries(map).filter(([, id]) => id !== fileId));
+    window.localStorage.setItem(DRAFT_ID_MAP_KEY, JSON.stringify(nextMap));
+  } catch {
+    // 무시 — 지워진 파일ID가 다음 저장 때 한 번 404 나고 자동으로 새로 만들어질 뿐 큰 문제 없음
+  }
+}
 
 export default function Page() {
   const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE, migrateDraft);
@@ -78,7 +88,17 @@ export default function Page() {
   const [draftList, setDraftList] = useState(null); // null=아직 안 불러옴, [] 이상=목록
   const [showDraftPicker, setShowDraftPicker] = useState(false);
 
-  const { hotelName, month, channelData, driveFolderInput } = state;
+  const { hotelName, month, channelData, driveFolderInput, hiddenSlides } = state;
+  const hiddenSlidesSet = new Set(hiddenSlides || []);
+
+  function handleToggleSlide(slideId) {
+    setState((prev) => {
+      const current = new Set(prev.hiddenSlides || []);
+      if (current.has(slideId)) current.delete(slideId);
+      else current.add(slideId);
+      return { ...prev, hiddenSlides: [...current] };
+    });
+  }
   const activeChannels = CHANNELS.filter((ch) => isChannelActive(channelData[ch.id], ch));
 
   function patch(partial) {
@@ -95,7 +115,7 @@ export default function Page() {
       if (mode === "preview") {
         await exportPreviewPptx({ hotelName, month });
       } else {
-        await exportPptx({ hotelName, month, channels: CHANNELS, channelData });
+        await exportPptx({ hotelName, month, channels: CHANNELS, channelData, hiddenSlides: hiddenSlidesSet });
       }
     } catch (e) {
       alert(e.message || String(e));
@@ -111,7 +131,7 @@ export default function Page() {
       setDriveStatus({ type: "saving", message: "보고서 생성 중..." });
       const { blob, fileName } = drivePptxMode === "preview"
         ? await exportPreviewPptx({ hotelName, month, outputType: "blob" })
-        : await exportPptx({ hotelName, month, channels: CHANNELS, channelData, outputType: "blob" });
+        : await exportPptx({ hotelName, month, channels: CHANNELS, channelData, outputType: "blob", hiddenSlides: hiddenSlidesSet });
       setDriveStatus({ type: "saving", message: "Google Drive에 업로드 중..." });
       const folderId = extractFolderId(driveFolderInput);
       const result = await uploadBlobToDrive({ accessToken: token, blob, fileName, folderId, asGoogleSlides: saveAsGoogleSlides });
@@ -178,6 +198,20 @@ export default function Page() {
       setState(migrateDraft(data, DEFAULT_STATE));
       setShowDraftPicker(false);
       setDraftSyncStatus({ type: "done", message: `"${data.hotelName || "-"} · ${data.month || "-"}" 불러왔습니다.` });
+    } catch (e) {
+      setDraftSyncStatus({ type: "error", message: e.message || String(e) });
+    }
+  }
+
+  async function handleDeleteDraft(fileId, name) {
+    if (!window.confirm(`"${name}" 임시저장을 Drive에서 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    setDraftSyncStatus({ type: "saving", message: "삭제 중..." });
+    try {
+      const token = await getAccessToken(GOOGLE_CLIENT_ID);
+      await deleteFileFromDrive({ accessToken: token, fileId });
+      clearTrackedDraftIdByFileId(fileId);
+      setDraftList((current) => (current || []).filter((f) => f.id !== fileId));
+      setDraftSyncStatus({ type: "done", message: `"${name}" 삭제했습니다.` });
     } catch (e) {
       setDraftSyncStatus({ type: "error", message: e.message || String(e) });
     }
@@ -352,18 +386,29 @@ export default function Page() {
               )}
               {draftList && draftList.length > 0 && (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {draftList.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => handleLoadDraft(f.id)}
-                      className="w-full text-left border border-lightgray rounded-md px-2.5 py-2 text-xs hover:bg-card"
-                    >
-                      <div className="font-bold text-navy">{f.name.replace(/_임시저장\.json$/, "")}</div>
-                      <div className="text-[10px] text-muted">
-                        {new Date(f.modifiedTime).toLocaleString("ko-KR")}
+                  {draftList.map((f) => {
+                    const displayName = f.name.replace(/_임시저장\.json$/, "");
+                    return (
+                      <div
+                        key={f.id}
+                        className="flex items-center gap-2 border border-lightgray rounded-md px-2.5 py-2 text-xs hover:bg-card"
+                      >
+                        <button onClick={() => handleLoadDraft(f.id)} className="flex-1 text-left min-w-0">
+                          <div className="font-bold text-navy truncate">{displayName}</div>
+                          <div className="text-[10px] text-muted">
+                            {new Date(f.modifiedTime).toLocaleString("ko-KR")}
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDraft(f.id, displayName)}
+                          title="Drive에서 완전히 삭제"
+                          className="shrink-0 text-muted hover:text-red-600 text-base leading-none px-1"
+                        >
+                          ✕
+                        </button>
                       </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -389,12 +434,30 @@ export default function Page() {
       {/* Right: live report preview */}
       <div data-report-preview className="flex-1 h-screen overflow-y-auto bg-[#E9E5DE] py-8">
         <div className="space-y-8 flex flex-col items-center">
-          <CoverPage hotelName={hotelName} month={month} />
-          <SummaryPage hotelName={hotelName} activeChannels={activeChannels} channelData={channelData} />
+          {!hiddenSlidesSet.has("cover") && (
+            <CoverPage hotelName={hotelName} month={month} onRemove={() => handleToggleSlide("cover")} />
+          )}
+          {!hiddenSlidesSet.has("summary") && (
+            <SummaryPage
+              hotelName={hotelName}
+              activeChannels={activeChannels}
+              channelData={channelData}
+              onRemove={() => handleToggleSlide("summary")}
+            />
+          )}
           {activeChannels.map((ch) => (
-            <ChannelReportSection key={ch.id} channel={ch} data={channelData[ch.id]} hotelName={hotelName} />
+            <ChannelReportSection
+              key={ch.id}
+              channel={ch}
+              data={channelData[ch.id]}
+              hotelName={hotelName}
+              hiddenSlides={hiddenSlidesSet}
+              onToggleSlide={handleToggleSlide}
+            />
           ))}
-          <ClosingPage hotelName={hotelName} month={month} />
+          {!hiddenSlidesSet.has("closing") && (
+            <ClosingPage hotelName={hotelName} month={month} onRemove={() => handleToggleSlide("closing")} />
+          )}
         </div>
       </div>
     </div>
