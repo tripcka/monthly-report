@@ -106,7 +106,17 @@ export default function Page() {
   }
 
   function updateChannel(id, next) {
-    setState((prev) => ({ ...prev, channelData: { ...prev.channelData, [id]: next } }));
+    setState((prev) => {
+      // 이 채널 데이터가 바뀌면(=다시 업로드/수정하면), 그 채널에 속한 슬라이드가
+      // "닫기"로 숨겨져 있었더라도 자동으로 다시 보이게 한다. "닫기"는 "지금 이 내용은
+      // 필요 없다"는 뜻이지 "앞으로 이 자리에 뭘 넣어도 영원히 숨겨라"는 뜻이 아니기 때문.
+      const nextHidden = (prev.hiddenSlides || []).filter((slideId) => !slideId.startsWith(`${id}:`));
+      return {
+        ...prev,
+        channelData: { ...prev.channelData, [id]: next },
+        hiddenSlides: nextHidden,
+      };
+    });
   }
 
   async function handleDownload(mode) {
