@@ -220,11 +220,195 @@ export function WeeklyInflowTable({ label, rows, noBottomMargin }) {
   );
 }
 
-/** table.layout === 'split'이면 좌/우 분할, 'weeklyInflow'면 총유입 병합 표, 아니면 일반 표 */
+/**
+ * "광고비 결제 인보이스" / "카드 결제 내역서" 표 전용 렌더러 — 왼쪽에 세로로 병합된
+ * 라벨 칸(예: "광고비\n인보이스"), 가운데 실제 데이터 열들, 오른쪽에 합계를 세로로
+ * 병합해서 한 번만 보여주는 칸(예: "합계")으로 구성된다.
+ * rows의 마지막 행이 ["__TOTAL__", 합계]로 들어온다는 약속은 WeeklyInflowTable과 동일.
+ */
+export function FlankedSummaryTable({ label, rows, flankLeft, flankRight, noBottomMargin }) {
+  if (!rows || rows.length < 2) return null;
+  const totalRowIndex = rows.findIndex((r) => r[0] === "__TOTAL__");
+  const total = totalRowIndex >= 0 ? rows[totalRowIndex][1] : null;
+  const header = rows[0];
+  const dataRows = rows.slice(1, totalRowIndex >= 0 ? totalRowIndex : undefined);
+  if (dataRows.length === 0) return null;
+  return (
+    <div className={noBottomMargin ? "" : "mb-6"}>
+      {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
+      <div className="flex border border-lightgray rounded-md overflow-hidden">
+        {flankLeft && (
+          <div className="w-20 shrink-0 bg-navy text-white flex items-center justify-center text-center px-1">
+            <span className="text-[11px] font-bold whitespace-pre-line leading-tight">{flankLeft}</span>
+          </div>
+        )}
+        <table className="flex-1 text-xs border-collapse">
+          <thead className="bg-navy text-white">
+            <tr>
+              {header.map((h, i) => (
+                <th key={i} className="px-3 py-2 border-l border-[#3a3a52] first:border-l-0 font-bold whitespace-nowrap">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {dataRows.map((row, ri) => (
+              <tr key={ri} className={ri % 2 === 0 ? "bg-[#FAF8F5]" : "bg-white"}>
+                {row.map((cell, ci) => (
+                  <td key={ci} className="px-3 py-1.5 text-center border-t border-lightgray whitespace-nowrap">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {total !== null && (
+          <div className="w-32 shrink-0 border-l border-lightgray bg-[#F0EDE7] flex flex-col items-center justify-center px-1">
+            <div className="text-navy font-bold text-xs mb-1">{flankRight || "합계"}</div>
+            <div className="text-orange font-bold text-base text-center">{total}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** table.layout === 'split'이면 좌/우 분할, 'weeklyInflow'면 총유입 병합 표,
+ * 'flankedSummary'면 좌/우 병합 라벨칸이 있는 요약표, 아니면 일반 표 */
 export function AutoTable({ label, table, rows, noBottomMargin }) {
   if (table.layout === "split") return <SplitCsvTable label={label} rows={rows} splitAt={table.splitAt} />;
   if (table.layout === "weeklyInflow") return <WeeklyInflowTable label={label} rows={rows} noBottomMargin={noBottomMargin} />;
+  if (table.layout === "flankedSummary") {
+    return (
+      <FlankedSummaryTable
+        label={label}
+        rows={rows}
+        flankLeft={table.flankLeft}
+        flankRight={table.flankRight}
+        noBottomMargin={noBottomMargin}
+      />
+    );
+  }
   return <CsvTable label={label} rows={rows} noBottomMargin={noBottomMargin} />;
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div className="flex justify-between gap-2 text-[10px] leading-snug">
+      <span className="text-graytxt">{label}</span>
+      <span className="text-navy font-bold text-right break-all">{value || "-"}</span>
+    </div>
+  );
+}
+
+/** Meta 광고비 인보이스 영수증 카드 한 장. */
+function InvoiceReceiptCard({ invoice }) {
+  return (
+    <div className="border border-lightgray rounded-md bg-white p-3 flex-1 min-w-0">
+      <div className="flex items-start justify-between mb-2 pb-2 border-b border-lightgray">
+        <div>
+          <div className="text-navy font-bold text-xs">
+            {invoice.accountId ? `${invoice.accountId}의 영수증` : "Meta 광고비 영수증"}
+          </div>
+          {invoice.accountId && <div className="text-graytxt text-[9px] mt-0.5">계정 ID: {invoice.accountId}</div>}
+        </div>
+        <div className="text-navy font-bold text-xs">∞ Meta</div>
+      </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+        <div className="space-y-1">
+          <DetailRow label="인보이스/결제 날짜" value={invoice.date} />
+          <DetailRow label="결제 수단" value={invoice.cardLast4 ? `Visa ····${invoice.cardLast4}` : "-"} />
+          <DetailRow label="참조 번호" value={invoice.refNo} />
+          <DetailRow label="거래 ID" value={invoice.transactionId} />
+        </div>
+        <div className="border-l border-lightgray pl-3 flex flex-col items-end justify-start">
+          <div className="text-graytxt text-[9px]">결제됨</div>
+          <div className="text-orange font-bold text-lg leading-tight">{invoice.total !== null ? `₩${Number(invoice.total).toLocaleString("ko-KR")}` : "-"}</div>
+          <div className="text-graytxt text-[9px] mt-1 text-right">
+            소계: {invoice.subtotal !== null ? `${Number(invoice.subtotal).toLocaleString("ko-KR")} KRW` : "-"}
+            <br />
+            VAT: {invoice.vat !== null ? `₩${Number(invoice.vat).toLocaleString("ko-KR")}(세율: ${invoice.vatRate || 10}%)` : "-"}
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-lightgray pt-2">
+        <DetailRow label="제품 유형" value={invoice.productType} />
+        {invoice.note && <div className="text-graytxt text-[9px] mt-1">{invoice.note}</div>}
+      </div>
+      {invoice.campaigns && invoice.campaigns.length > 0 && (
+        <div className="border-t border-lightgray mt-2 pt-2 space-y-1">
+          <div className="text-navy font-bold text-[10px] mb-1">캠페인</div>
+          {invoice.campaigns.map((c, i) => (
+            <div key={i} className="flex justify-between text-[9px] text-graytxt">
+              <span className="truncate pr-2">{c.name}</span>
+              <span className="text-navy font-bold shrink-0">{c.amount}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 신용카드사 카드매출전표 카드 한 장. */
+function CardSlipCard({ card }) {
+  const amountCells = [
+    ["금액(AMOUNT)", card.amount],
+    ["부가세(VAT)", card.vat],
+    ["봉사료(S/C)", card.service],
+    ["합계(TOTAL)", card.total],
+  ];
+  return (
+    <div className="border border-lightgray rounded-md bg-white p-3 flex-1 min-w-0">
+      <div className="text-navy font-bold text-xs mb-2 pb-2 border-b border-lightgray">카드매출전표 (인터넷 재발급용)</div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+        <DetailRow label="카드번호" value={card.cardLast4 ? `**** - **** - ${card.cardLast4}` : "-"} />
+        <DetailRow label="거래일시" value={card.date} />
+        <DetailRow label="매장명" value={card.merchantName} />
+        <DetailRow label="승인번호" value={card.approvalNo} />
+        <DetailRow label="가맹점번호" value={card.merchantNo} />
+        <DetailRow label="가맹점주소" value={card.merchantAddress} />
+      </div>
+      <div className="grid grid-cols-4 border-t border-lightgray pt-2">
+        {amountCells.map(([label, value]) => (
+          <div key={label} className="text-center">
+            <div className="text-graytxt text-[8px] leading-tight">{label}</div>
+            <div className="text-navy font-bold text-[11px]">
+              {value === null || value === undefined ? "-" : Number(value).toLocaleString("ko-KR")}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** invoiceReceipts/cardSlipReceipts 표 데이터(행렬이 아니라 파싱된 객체 배열)를
+ * 2개씩 나란히 배치해서 보여준다. */
+export function InvoiceReceiptsGrid({ label, rows, noBottomMargin }) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div className={noBottomMargin ? "" : "mb-6"}>
+      {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
+      <div className="grid grid-cols-2 gap-3">
+        {rows.map((invoice, i) => <InvoiceReceiptCard key={i} invoice={invoice} />)}
+      </div>
+    </div>
+  );
+}
+
+export function CardSlipsGrid({ label, rows, noBottomMargin }) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div className={noBottomMargin ? "" : "mb-6"}>
+      {label ? <div className="text-navy font-bold text-sm mb-2"><span className="text-orange">■</span> {label}</div> : null}
+      <div className="grid grid-cols-2 gap-3">
+        {rows.map((card, i) => <CardSlipCard key={i} card={card} />)}
+      </div>
+    </div>
+  );
 }
 export function ImageSlot({ label, src }) {
   const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];

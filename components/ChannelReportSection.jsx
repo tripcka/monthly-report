@@ -1,6 +1,18 @@
 "use client";
 
-import { PageShell, PageTitle, SectionTitle, StatCard, StatCardRow, AutoTable, CsvTable, ImageSlot, Footer } from "./ReportUI";
+import {
+  PageShell,
+  PageTitle,
+  SectionTitle,
+  StatCard,
+  StatCardRow,
+  AutoTable,
+  CsvTable,
+  ImageSlot,
+  Footer,
+  InvoiceReceiptsGrid,
+  CardSlipsGrid,
+} from "./ReportUI";
 import { toImgArray } from "../lib/imageUtils";
 import { normalizeInstagramPostsRows } from "../lib/postsTable";
 
@@ -29,6 +41,14 @@ function GroupContent({ channel, group, data }) {
     .map((t) => ({ t, rows: tableRowsFor(t) }))
     .filter(({ rows }) => rows && rows.length > 0);
 
+  // invoiceReceipts/cardSlipReceipts는 표(행렬)가 아니라 파싱된 인보이스/카드전표 객체
+  // 배열이라서 AutoTable 대신 전용 카드 그리드로 렌더링한다.
+  function renderTableOrCards(t, rows, noBottomMargin) {
+    if (t.key === "invoiceReceipts") return <InvoiceReceiptsGrid key={t.key} label={null} rows={rows} noBottomMargin={noBottomMargin} />;
+    if (t.key === "cardSlipReceipts") return <CardSlipsGrid key={t.key} label={null} rows={rows} noBottomMargin={noBottomMargin} />;
+    return <AutoTable key={t.key} label={null} table={t} rows={rows} noBottomMargin={noBottomMargin} />;
+  }
+
   return (
     <>
       <SectionTitle text={group.title} />
@@ -36,12 +56,12 @@ function GroupContent({ channel, group, data }) {
         <div className="flex gap-3 items-start mb-6">
           {renderableTables.map(({ t, rows }) => (
             <div key={t.key} className="flex-1 min-w-0">
-              <AutoTable label={null} table={t} rows={rows} noBottomMargin />
+              {renderTableOrCards(t, rows, true)}
             </div>
           ))}
         </div>
       ) : (
-        renderableTables.map(({ t, rows }) => <AutoTable key={t.key} label={null} table={t} rows={rows} />)
+        renderableTables.map(({ t, rows }) => renderTableOrCards(t, rows, false))
       )}
       {group.kpiDetail && (
         <>

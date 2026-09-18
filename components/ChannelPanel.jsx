@@ -22,12 +22,20 @@ import {
   parseNaverVisitCounts,
   parseNaverInflowKeywords,
 } from "../lib/parsers/naverBlogStats";
+import {
+  parseMetaInvoiceText,
+  parseCardSlipText,
+  buildInvoiceSummaryTable,
+  buildCardSummaryTable,
+} from "../lib/parsers/instagramInvoice";
 
 const EMPTY_POST_INSIGHT = { date: "", topic: "", isAd: "N", adCost: "", text: "" };
 const EMPTY_AD_INSIGHT = { name: "", text: "" };
 const ADS_PER_FEED = 3;
 const MAX_AD_FEEDS = 6;
 const EMPTY_CAFE_POST = { cafeName: "", title: "", url: "" };
+const EMPTY_INVOICE_ENTRY = { invoiceText: "", cardText: "" };
+const MAX_INVOICE_ENTRIES = 6;
 
 function makeAdFeed(feedIndex) {
   return {
@@ -51,6 +59,8 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
   const [igPasteText, setIgPasteText] = useState("");
   const [postInsights, setPostInsights] = useState([{ ...EMPTY_POST_INSIGHT }]);
   const [adInsightFeeds, setAdInsightFeeds] = useState([makeAdFeed(0)]);
+  const [invoiceEntries, setInvoiceEntries] = useState([{ ...EMPTY_INVOICE_ENTRY }, { ...EMPTY_INVOICE_ENTRY }]);
+  const [invoiceStatus, setInvoiceStatus] = useState(null);
   const [blogUrl, setBlogUrl] = useState("");
   const [blogYearMonth, setBlogYearMonth] = useState(() => reportMonthToInput(reportMonth));
   const [blogStatus, setBlogStatus] = useState(null);
@@ -201,6 +211,58 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
     setIgStatus({
       type: "done",
       message: `피드 ${parsedFeeds.length}개 · 광고 인사이트 ${adCount}건 반영 완료 (타겟·주요 위치 포함)`,
+    });
+  }
+
+  function patchInvoiceEntry(index, patch) {
+    setInvoiceEntries((current) => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  }
+
+  function addInvoiceEntry() {
+    setInvoiceEntries((current) => (
+      current.length >= MAX_INVOICE_ENTRIES ? current : [...current, { ...EMPTY_INVOICE_ENTRY }]
+    ));
+  }
+
+  function removeInvoiceEntry(index) {
+    setInvoiceEntries((current) => current.filter((_, i) => i !== index));
+  }
+
+  // 인보이스 원문 + 카드매출전표 원문을 같은 순서로 짝지어 붙여넣으면(예: 1번째 인보이스 ↔
+  // 1번째 카드전표는 같은 결제 건), 두 원문을 각각 파싱해서 "광고비 결제 인보이스"/
+  // "광고비 카드 결제 내역" 요약표 + 영수증·전표 카드를 자동으로 채운다.
+  // 카드전표에는 "현지 금액(+vat)" 칸이 없어서, 짝지어진 인보이스의 최종 금액을 그대로 가져와 채운다.
+  function handleInvoicesPaste() {
+    const invoices = [];
+    const cardSlips = [];
+    invoiceEntries.forEach((entry) => {
+      const invoice = parseMetaInvoiceText(entry.invoiceText);
+      const card = parseCardSlipText(entry.cardText);
+      if (invoice) invoices.push(invoice);
+      if (card) {
+        cardSlips.push({ ...card, localAmount: invoice?.total ?? card.amount });
+      }
+    });
+    if (invoices.length === 0 && cardSlips.length === 0) {
+      setInvoiceStatus({
+        type: "error",
+        message: "인식할 수 있는 인보이스/카드전표 내용이 없습니다. 원문을 그대로 복사해서 붙여넣어 주세요.",
+      });
+      return;
+    }
+    const nextTables = { ...data.tables };
+    if (invoices.length > 0) {
+      nextTables.invoiceReceipts = invoices;
+      nextTables.invoiceSummary = buildInvoiceSummaryTable(invoices);
+    }
+    if (cardSlips.length > 0) {
+      nextTables.cardSlipReceipts = cardSlips;
+      nextTables.cardSummary = buildCardSummaryTable(cardSlips);
+    }
+    onChange({ ...data, tables: nextTables });
+    setInvoiceStatus({
+      type: "done",
+      message: `인보이스 ${invoices.length}건 · 카드전표 ${cardSlips.length}건 반영 완료`,
     });
   }
 
@@ -587,6 +649,67 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
               {igStatus?.type === "error" && (
                 <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {igStatus.message}</div>
               )}
+              <div className="border-t border-lightgray pt-3 space-y-3">
+                <div className="text-xs font-bold text-graytxt">
+                  광고비 인보이스 · 카드 결제 내역 붙여넣기 (인보이스에 원본 그대로 인보이스가 들어가는 호텔만 해당)
+                </div>
+                <div className="text-[11px] text-graytxt">
+                  Meta 인보이스 페이지와 카드사 카드매출전표(카드 결제 내역서)에서 복사한 원문을 각각
+                  그대로 붙여넣으세요. 같은 결제 건의 인보이스·카드전표를 같은 번호끼리 짝지어 넣으면
+                  "광고비 결제 인보이스"/"광고비 카드 결제 내역" 표와 영수증·전표 카드가 자동으로 채워집니다.
+                </div>
+                {invoiceEntries.map((entry, index) => (
+                  <div key={index} className="border border-lightgray rounded-md p-2 bg-white space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-navy">결제 건 {index + 1}</span>
+                      {invoiceEntries.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeInvoiceEntry(index)}
+                          className="text-[10px] text-red-600"
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <textarea
+                        value={entry.invoiceText}
+                        onChange={(e) => patchInvoiceEntry(index, { invoiceText: e.target.value })}
+                        placeholder="Meta 인보이스 원문을 붙여넣으세요."
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs w-full h-28 resize-y"
+                      />
+                      <textarea
+                        value={entry.cardText}
+                        onChange={(e) => patchInvoiceEntry(index, { cardText: e.target.value })}
+                        placeholder="카드매출전표(카드 결제 내역서) 원문을 붙여넣으세요."
+                        className="border border-lightgray rounded px-2 py-1.5 text-xs w-full h-28 resize-y"
+                      />
+                    </div>
+                  </div>
+                ))}
+                {invoiceEntries.length < MAX_INVOICE_ENTRIES && (
+                  <button
+                    type="button"
+                    onClick={addInvoiceEntry}
+                    className="w-full border border-orange text-orange font-bold rounded-md py-2 text-sm bg-white"
+                  >
+                    + 결제 건 추가 ({invoiceEntries.length}/{MAX_INVOICE_ENTRIES})
+                  </button>
+                )}
+                <button
+                  onClick={handleInvoicesPaste}
+                  className="w-full bg-orange text-white font-bold rounded-md py-2 text-sm"
+                >
+                  인보이스 · 카드 결제 내역에 반영
+                </button>
+                {invoiceStatus?.type === "done" && (
+                  <div className="text-xs text-green-700">✓ {invoiceStatus.message}</div>
+                )}
+                {invoiceStatus?.type === "error" && (
+                  <div className="text-xs text-red-600 whitespace-pre-wrap">⚠ {invoiceStatus.message}</div>
+                )}
+              </div>
             </div>
           </div>
         )}
