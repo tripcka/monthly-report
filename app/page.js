@@ -79,7 +79,7 @@ function clearTrackedDraftIdByFileId(fileId) {
 }
 
 export default function Page() {
-  const [state, setState, clearDraft, restored] = useDraft(DEFAULT_STATE, migrateDraft);
+  const [state, setState, clearDraft, restored, autosaveStatus] = useDraft(DEFAULT_STATE, migrateDraft);
   const [exporting, setExporting] = useState(null); // 'preview' | 'editable' | null
   const [driveStatus, setDriveStatus] = useState(null); // { type: 'saving'|'done'|'error', message }
   const [saveAsGoogleSlides, setSaveAsGoogleSlides] = useState(true);
@@ -230,8 +230,21 @@ export default function Page() {
       <div className="w-[420px] shrink-0 border-r border-lightgray h-screen overflow-y-auto p-5 bg-[#FAF8F5]">
         <div className="flex items-center justify-between mb-1">
           <div className="text-orange font-bold text-lg tracking-widest">TRIPICKA</div>
-          <span className="text-[10px] text-muted">자동 임시저장됨</span>
+          {autosaveStatus === "error" ? (
+            <span className="text-[10px] text-red-600 font-bold">⚠ 자동저장 실패 (새로고침 금지!)</span>
+          ) : autosaveStatus === "saving" ? (
+            <span className="text-[10px] text-muted">저장 중...</span>
+          ) : (
+            <span className="text-[10px] text-muted">자동 임시저장됨</span>
+          )}
         </div>
+        {autosaveStatus === "error" && (
+          <div className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-2 mb-3 leading-relaxed">
+            브라우저에 자동저장이 안 되고 있어요(용량 초과 가능성 — 이미지를 너무 많이 첨부했을 수 있습니다).
+            이 상태에서 새로고침하거나 탭을 닫으면 지금까지 작업한 내용을 잃을 수 있으니,
+            먼저 아래 "Drive에 임시저장"으로 저장해 두세요.
+          </div>
+        )}
         <div className="text-navy font-bold text-xl mb-4">마케팅 보고서 생성기</div>
 
         <div className="space-y-2 mb-3">
