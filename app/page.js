@@ -8,7 +8,7 @@ import { CoverPage, SummaryPage, ClosingPage } from "../components/FixedSections
 import { exportPptx } from "../lib/pptxExport";
 import { exportPreviewPptx } from "../lib/previewPptxExport";
 import { useDraft } from "../lib/useDraft";
-import { getAccessToken, uploadBlobToDrive, extractFolderId, uploadJsonToDrive, listDraftsFromDrive, downloadJsonFromDrive, deleteFileFromDrive } from "../lib/googleDrive";
+import { withFreshToken, uploadBlobToDrive, extractFolderId, uploadJsonToDrive, listDraftsFromDrive, downloadJsonFromDrive, deleteFileFromDrive } from "../lib/googleDrive";
 
 const DEFAULT_STATE = {
   hotelName: "",
@@ -135,16 +135,16 @@ export default function Page() {
   }
 
   async function handleSaveToDrive() {
-    setDriveStatus({ type: "saving", message: "Google 로그인 확인 중..." });
+    setDriveStatus({ type: "saving", message: "보고서 생성 중..." });
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID);
-      setDriveStatus({ type: "saving", message: "보고서 생성 중..." });
       const { blob, fileName } = drivePptxMode === "preview"
         ? await exportPreviewPptx({ hotelName, month, outputType: "blob" })
         : await exportPptx({ hotelName, month, channels: CHANNELS, channelData, outputType: "blob", hiddenSlides: hiddenSlidesSet });
       setDriveStatus({ type: "saving", message: "Google Drive에 업로드 중..." });
       const folderId = extractFolderId(driveFolderInput);
-      const result = await uploadBlobToDrive({ accessToken: token, blob, fileName, folderId, asGoogleSlides: saveAsGoogleSlides });
+      const result = await withFreshToken(GOOGLE_CLIENT_ID, (token) =>
+        uploadBlobToDrive({ accessToken: token, blob, fileName, folderId, asGoogleSlides: saveAsGoogleSlides })
+      );
       setDriveStatus({
         type: "done",
         message: "저장 완료!",
@@ -160,24 +160,22 @@ export default function Page() {
       setDraftSyncStatus({ type: "error", message: "호텔명과 보고 월을 먼저 입력해 주세요 (임시저장 파일명·구분 기준입니다)." });
       return;
     }
-    setDraftSyncStatus({ type: "saving", message: "Google 로그인 확인 중..." });
+    setDraftSyncStatus({ type: "saving", message: "Drive에 저장 중..." });
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID);
-      setDraftSyncStatus({ type: "saving", message: "Drive에 저장 중..." });
       const folderId = extractFolderId(driveFolderInput);
       const fileName = `${hotelName}_${month}_임시저장.json`;
       const existingId = getTrackedDraftId(hotelName, month);
-      let result;
-      try {
-        result = await uploadJsonToDrive({ accessToken: token, data: state, fileName, folderId, fileId: existingId });
-      } catch (e) {
-        // 기억해둔 fileId가 더 이상 유효하지 않으면(삭제됨 등) 새 파일로 다시 시도
-        if (existingId && (e.status === 404 || e.status === 403)) {
-          result = await uploadJsonToDrive({ accessToken: token, data: state, fileName, folderId });
-        } else {
+      const result = await withFreshToken(GOOGLE_CLIENT_ID, async (token) => {
+        try {
+          return await uploadJsonToDrive({ accessToken: token, data: state, fileName, folderId, fileId: existingId });
+        } catch (e) {
+          // 기억해둔 fileId가 더 이상 유효하지 않으면(삭제됨 등) 새 파일로 다시 시도
+          if (existingId && (e.status === 404 || e.status === 403)) {
+            return await uploadJsonToDrive({ accessToken: token, data: state, fileName, folderId });
+          }
           throw e;
         }
-      }
+      });
       setTrackedDraftId(hotelName, month, result.id);
       setDraftSyncStatus({ type: "done", message: "임시저장 완료! 다른 기기·브라우저에서도 아래 '불러오기'로 이어서 작업할 수 있어요.", link: result.webViewLink });
       setDraftList(null); // 목록 캐시 무효화 (다음에 열 때 새로 불러오도록)
@@ -191,8 +189,7 @@ export default function Page() {
     if (draftList !== null) return; // 이미 불러온 목록 있으면 재사용
     setDraftSyncStatus({ type: "saving", message: "임시저장 목록 불러오는 중..." });
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID);
-      const files = await listDraftsFromDrive({ accessToken: token });
+      const files = await withFreshToken(GOOGLE_CLIENT_ID, (token) => listDraftsFromDrive({ accessToken: token }));
       setDraftList(files);
       setDraftSyncStatus(null);
     } catch (e) {
@@ -203,8 +200,7 @@ export default function Page() {
   async function handleLoadDraft(fileId) {
     setDraftSyncStatus({ type: "saving", message: "불러오는 중..." });
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID);
-      const data = await downloadJsonFromDrive({ accessToken: token, fileId });
+      const data = await withFreshToken(GOOGLE_CLIENT_ID, (token) => downloadJsonFromDrive({ accessToken: token, fileId }));
       setState(migrateDraft(data, DEFAULT_STATE));
       setShowDraftPicker(false);
       setDraftSyncStatus({ type: "done", message: `"${data.hotelName || "-"} · ${data.month || "-"}" 불러왔습니다.` });
@@ -217,8 +213,7 @@ export default function Page() {
     if (!window.confirm(`"${name}" 임시저장을 Drive에서 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
     setDraftSyncStatus({ type: "saving", message: "삭제 중..." });
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID);
-      await deleteFileFromDrive({ accessToken: token, fileId });
+      await withFreshToken(GOOGLE_CLIENT_ID, (token) => deleteFileFromDrive({ accessToken: token, fileId }));
       clearTrackedDraftIdByFileId(fileId);
       setDraftList((current) => (current || []).filter((f) => f.id !== fileId));
       setDraftSyncStatus({ type: "done", message: `"${name}" 삭제했습니다.` });
