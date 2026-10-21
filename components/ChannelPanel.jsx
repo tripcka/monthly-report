@@ -494,6 +494,17 @@ export default function ChannelPanel({ channel, data, onChange, reportMonth, hot
               >
                 붙여넣은 내용 자동 분석
               </button>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] text-muted whitespace-nowrap">
+                  도달수 (자동 인식 안 될 때 직접 입력)
+                </span>
+                <input
+                  placeholder="예: 12,345"
+                  value={data.kpis.reach30d || ""}
+                  onChange={(e) => setKpi("reach30d", e.target.value)}
+                  className="border border-lightgray rounded-md px-2 py-1 text-xs flex-1 min-w-0"
+                />
+              </div>
             </div>
             <div className="border-t border-lightgray pt-3 space-y-3">
               <div className="flex items-center justify-between">

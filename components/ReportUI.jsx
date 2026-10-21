@@ -410,21 +410,31 @@ export function CardSlipsGrid({ label, rows, noBottomMargin }) {
     </div>
   );
 }
+// 이미지 슬롯의 한 행에 들어가는 최대 장수. 3장을 넘으면 다음 행으로 넘어간다.
+const IMAGE_SLOT_MAX_COLS = 3;
+
 export function ImageSlot({ label, src }) {
   const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];
   if (srcs.length > 0) {
+    // 가로폭은 "한 행에 실제로 들어간 장수"에 맞춰 나눈다 — 1장=풀폭(노출수~광고비 KPI
+    // 박스 행과 같은 폭), 2장=1/2, 3장=1/3. 4장째부터는 다음 행으로 넘어간다.
+    const rows = [];
+    for (let i = 0; i < srcs.length; i += IMAGE_SLOT_MAX_COLS) rows.push(srcs.slice(i, i + IMAGE_SLOT_MAX_COLS));
     return (
-      <div className="mb-6">
-        <div className="flex flex-wrap items-start gap-3">
-          {srcs.map((s, i) => (
-            <img
-              key={i}
-              src={s}
-              alt={`${label} ${i + 1}`}
-              className="block max-h-[220px] max-w-[32%] w-auto h-auto object-contain rounded-md border border-lightgray bg-white p-1"
-            />
-          ))}
-        </div>
+      <div className="mb-6 space-y-3">
+        {rows.map((rowSrcs, rowIndex) => (
+          <div key={rowIndex} className="flex items-start gap-3">
+            {rowSrcs.map((s, i) => (
+              <img
+                key={i}
+                src={s}
+                alt={`${label} ${rowIndex * IMAGE_SLOT_MAX_COLS + i + 1}`}
+                style={{ width: `calc((100% - ${(rowSrcs.length - 1) * 12}px) / ${rowSrcs.length})` }}
+                className="block max-h-[220px] h-auto object-contain rounded-md border border-lightgray bg-white p-1"
+              />
+            ))}
+          </div>
+        ))}
       </div>
     );
   }
