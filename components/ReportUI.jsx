@@ -1,5 +1,7 @@
 "use client";
 
+import { computeImageRowHeight } from "../lib/imageUtils";
+
 // ============================================================================
 // TRIPICKA 디자인 시스템 — pptxgenjs 템플릿과 동일한 색상/스타일을 웹 컴포넌트로 재구현
 // 컬러: 오렌지(#E8562C) · 네이비(#1B1B2F) · 크림카드(#F3EFE9) · 회색텍스트(#4B5563)
@@ -411,30 +413,42 @@ export function CardSlipsGrid({ label, rows, noBottomMargin }) {
   );
 }
 // 이미지 슬롯의 한 행에 들어가는 최대 장수. 3장을 넘으면 다음 행으로 넘어간다.
+// PageShell은 항상 고정 1280px(p-10 여백 40px×2를 뺀 콘텐츠 폭 1200px)이라 실제
+// 픽셀값으로 바로 계산할 수 있다 — PPTX(인치) 쪽과 96px/in 기준으로 맞춰뒀다.
 const IMAGE_SLOT_MAX_COLS = 3;
+const IMAGE_CONTENT_W_PX = 1200;
+const IMAGE_GAP_PX = 12;
+const IMAGE_MIN_ROW_H_PX = 106; // PPTX IMG_MIN_ROW_H(1.1in) × 96px/in
+const IMAGE_MAX_ROW_H_PX = 346; // PPTX IMG_MAX_ROW_H(3.6in) × 96px/in
 
 export function ImageSlot({ label, src }) {
   const srcs = Array.isArray(src) ? src.filter(Boolean) : src ? [src] : [];
   if (srcs.length > 0) {
     // 가로폭은 "한 행에 실제로 들어간 장수"에 맞춰 나눈다 — 1장=풀폭(노출수~광고비 KPI
-    // 박스 행과 같은 폭), 2장=1/2, 3장=1/3. 4장째부터는 다음 행으로 넘어간다.
+    // 박스 행과 같은 폭), 2장=1/2, 3장=1/3. 세로 높이도 그 행에서 가장 필요한 만큼으로
+    // 같이 키워서(영수증처럼 세로로 긴 이미지가 폭만 넓고 작게 보이는 문제를 막는다).
     const rows = [];
     for (let i = 0; i < srcs.length; i += IMAGE_SLOT_MAX_COLS) rows.push(srcs.slice(i, i + IMAGE_SLOT_MAX_COLS));
     return (
       <div className="mb-6 space-y-3">
-        {rows.map((rowSrcs, rowIndex) => (
-          <div key={rowIndex} className="flex items-start gap-3">
-            {rowSrcs.map((s, i) => (
-              <img
-                key={i}
-                src={s}
-                alt={`${label} ${rowIndex * IMAGE_SLOT_MAX_COLS + i + 1}`}
-                style={{ width: `calc((100% - ${(rowSrcs.length - 1) * 12}px) / ${rowSrcs.length})` }}
-                className="block max-h-[220px] h-auto object-contain rounded-md border border-lightgray bg-white p-1"
-              />
-            ))}
-          </div>
-        ))}
+        {rows.map((rowSrcs, rowIndex) => {
+          const cols = rowSrcs.length;
+          const cellW = (IMAGE_CONTENT_W_PX - (cols - 1) * IMAGE_GAP_PX) / cols;
+          const rowH = computeImageRowHeight(rowSrcs, cellW, { minH: IMAGE_MIN_ROW_H_PX, maxH: IMAGE_MAX_ROW_H_PX });
+          return (
+            <div key={rowIndex} className="flex items-start gap-3">
+              {rowSrcs.map((s, i) => (
+                <img
+                  key={i}
+                  src={s}
+                  alt={`${label} ${rowIndex * IMAGE_SLOT_MAX_COLS + i + 1}`}
+                  style={{ width: cellW, height: rowH }}
+                  className="block object-contain rounded-md border border-lightgray bg-white p-1"
+                />
+              ))}
+            </div>
+          );
+        })}
       </div>
     );
   }
